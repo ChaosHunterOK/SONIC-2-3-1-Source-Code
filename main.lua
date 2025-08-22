@@ -4,10 +4,16 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "error"
+local gamestate = "test"
 
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
+
+local isMobile = false
+local os = love.system.getOS()
+if os == "Android" or os == "iOS" then
+    isMobile = true
+end
 
 gravity = 600
 
@@ -323,15 +329,15 @@ local message_alpha = 0
 local touches = {}
 
 local joystick = {
-    x = 4, y = base_height - 45,
-    radius = 60,
+    x = 45, y = base_height - 45,
+    radius = 20,
     active = false,
     dx = 0,
     dy = 0
 }
 
 local jumpButton = {
-    x = base_width - 80, y = base_height - 45,
+    x = base_width - 45, y = base_height - 45,
     radius = 50,
     active = false
 }
@@ -1756,6 +1762,34 @@ function tails_tail_thing()
         end
 end
 
+function mobile_stuff_draw()
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.draw(
+        joystickBaseImage,
+        joystick.x - joystickBaseImage:getWidth(),
+        joystick.y - joystickBaseImage:getHeight(),
+        0,
+        2, 2
+    )
+
+    local knobX = joystick.x + joystick.dx * joystick.radius
+    love.graphics.draw(
+        joystickKnobImage,
+        knobX - joystickKnobImage:getWidth(),
+        joystick.y - joystickKnobImage:getHeight(),
+        0,
+        2, 2
+    )
+
+    love.graphics.draw(
+        jumpButtonImage,
+        jumpButton.x - jumpButtonImage:getWidth(),
+        jumpButton.y - jumpButtonImage:getHeight(),
+        0,
+        2, 2
+    )
+end
+
 function love.draw()
     love.graphics.setFont(Font)
     love.graphics.setCanvas(canvas)love.graphics.setColor(0, 0, 0)
@@ -2089,6 +2123,10 @@ function love.draw()
         love.graphics.rectangle("fill", 0, 0, base_width * 2, base_height * 2)
         love.graphics.setColor(1, 1, 1, 1)
     end
+
+    if isMobile then
+        mobile_stuff_draw()
+    end
     love.graphics.setCanvas()
     love.graphics.draw(canvas, offset_x, offset_y, 0, scale_factor, scale_factor)
 end
@@ -2196,10 +2234,40 @@ function love.keypressed(key)
 end
 
 function love.touchpressed(id, x, y)
+    if not isMobile then return end
+    touches[id] = {x=x, y=y}
+
+    local dxJ = x - joystick.x
+    local dyJ = y - joystick.y
+    if dxJ*dxJ + dyJ*dyJ <= (joystick.radius*2)^2 then
+        joystick.active = true
+    end
+
+    local dxB = x - jumpButton.x
+    local dyB = y - jumpButton.y
+    if dxB*dxB + dyB*dyB <= (jumpButton.radius*2)^2 then
+        jumpButton.active = true
+    end
 end
 
 function love.touchmoved(id, x, y)
+    if not isMobile then return end
+    if touches[id] then
+        touches[id].x, touches[id].y = x, y
+        if joystick.active then
+            local dx = x - joystick.x
+            local dy = y - joystick.y
+            joystick.dx = math.max(-1, math.min(1, dx / joystick.radius))
+            joystick.dy = math.max(-1, math.min(1, dy / joystick.radius))
+        end
+    end
 end
 
 function love.touchreleased(id, x, y)
+    if not isMobile then return end
+    touches[id] = nil
+    joystick.active = false
+    joystick.dx = 0
+    joystick.dy = 0
+    jumpButton.active = false
 end
