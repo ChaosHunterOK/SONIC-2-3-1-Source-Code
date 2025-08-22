@@ -4,7 +4,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "error"
+local gamestate = "menuscreen"
 
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
@@ -46,32 +46,39 @@ local idk_img = love.graphics.newImage("images/idk.png")
 local chase_img = love.graphics.newImage("images/chase.png")
 local bush_img = love.graphics.newImage("images/bush.png")
 local egg_mob = love.graphics.newImage("images/egg_mob.png")
+print("loaded things for hide and seek i think")
 
 knuck_bg = love.graphics.newImage("images/background/knuck.png")
 knuck_bg2 = love.graphics.newImage("images/background/knuck2.png")
 knuck_bg3 = love.graphics.newImage("images/background/knuck3.png")
+print("loaded more imgs")
 
 local selection_box = love.graphics.newImage("images/selection/box.png")
 local tails_selection = love.graphics.newImage("images/selection/tails_selection.png")
 local knuck_selection = love.graphics.newImage("images/selection/knuckles_selection.png")
 local eggman_selection = love.graphics.newImage("images/selection/eggman_selection.png")
+print("loaded selection boxes")
 
 local dead_tails = love.graphics.newImage("images/selection/dead_tails.png")
 local dead_knuckles = love.graphics.newImage("images/selection/dead_knuckles.png")
 local dead_eggman = love.graphics.newImage("images/selection/dead_eggman.png")
+print("dead perosn")
 
 local test2 = love.graphics.newImage("images/maps/test2.png")
 local test3 = love.graphics.newImage("images/maps/map1.png")
 local knuck1 = love.graphics.newImage("images/maps/knuck1.png")
 local gh1 = love.graphics.newImage("images/maps/gh1.png")
+print("some maps")
 
 lockImg = love.graphics.newImage("images/lock.png")
+print("lock")
 
 Font = love.graphics.newFont("font/font.ttf", 16)
 FontBig = love.graphics.newFont("font/font.ttf", 32)
 Font2 = love.graphics.newFont("font/sonicdebugfont.ttf", 12)
 Font3 = love.graphics.newFont("font/sonicfont.ttf", 32)
 Font4 = love.graphics.newFont("font/font2.ttf", 16)
+print("fontsies")
 
 local soundDefs = {
     sonic_theme = "music/sonic_theme.ogg",
@@ -96,6 +103,7 @@ local soundDefs = {
     S3K_9A = "sounds/S3K_9A.wav",
     lights_off = "sounds/lights-sound-effect.mp3"
 }
+print("loaded ALL sounds")
 
 local sounds = {}
 
@@ -133,6 +141,7 @@ map  = loadMap("images/maps/test.png")
 map1 = loadMap("images/maps/map2.png")
 map2 = loadMap("images/maps/knuck2.png")
 map3 = loadMap("images/maps/gh2.png")
+print("loaded maps again.")
 
 local function createCharacter(opts)
     opts = opts or {}
@@ -169,6 +178,7 @@ end
 local chunkSize, renderDistance = 4, 24
 leftwImage = love.graphics.newImage("images/arrows/leftw.png")
 rightwImage = love.graphics.newImage("images/arrows/rightw.png")
+print("arrow")
 
 flashAlpha = 0
 flashDuration = 0.5
@@ -202,18 +212,22 @@ end
 
 stage1 = love.graphics.newImage(spritesFolder.."sonic_demo.exe/anim/knuckles/stage1.png")
 stage1_vis = true
+print("loaded knuckles even though thats sonic")
+
 local s1 = createCharacter{x = 100, y = 50}
 s1.stage2 = loadFrames(spritesFolder .. "sonic_demo.exe/anim/knuckles/stage2/", 2)
 stage2_vis = true
 stage3 = love.graphics.newImage(spritesFolder.."sonic_demo.exe/anim/knuckles/stage3.png")
 stage3_vis = true
+print("oop no thats demo nvm")
 
-local tails = createCharacter{ x = 100, y = 50 }
+local tails = createCharacter{ x = 100, y = 50, maxSpeed = 400 }
 tails.idle = love.graphics.newImage(spritesFolder .. "tails/idle.png")
 tails.down = love.graphics.newImage(spritesFolder .. "tails/down/1.png")
 tails.walk = loadFrames(spritesFolder .. "tails/walking/", 8)
 tails.jump = loadFrames(spritesFolder .. "tails/jump/", 3)
 tails.run = loadFrames(spritesFolder .. "tails/run/", 2)
+print("loaded tails")
 
 local knuckles = createCharacter{ x = 100, y = 50 }
 knuckles.idle = love.graphics.newImage(spritesFolder .. "knuckles/idle.png")
@@ -221,12 +235,14 @@ knuckles.walk = loadFrames(spritesFolder .. "knuckles/walking/", 7)
 knuckles.run = loadFrames(spritesFolder .. "knuckles/run/", 4)
 knuckles.jump = loadFrames(spritesFolder .. "knuckles/jump/", 5)
 knuckles.wait = loadFrames(spritesFolder .. "knuckles/confused/", 2)
+print("loaded knuckknuck")
 
 local eggman = createCharacter{ x = 3300, y = 50, maxSpeed = 140 }
 eggman.idle = love.graphics.newImage(spritesFolder .. "eggman/idle.png")
 eggman.walk = loadFrames(spritesFolder .. "eggman/walking/", 3)
 eggman.run = loadFrames(spritesFolder .. "eggman/walking/", 3)
 eggman.jump = loadFrames(spritesFolder .. "eggman/walking/", 1)
+print("loaded knuckknuck")
 
 local sonic_demoexe = createCharacter{x = -100, y = -140 }
 sonic_demoexe.idle = love.graphics.newImage(spritesFolder .. "sonic_demo.exe/idle.png")
@@ -237,13 +253,15 @@ sonic_demoexe.run = loadFrames(spritesFolder .. "sonic_demo.exe/run/", 4)
 sonic_demoexe.walk = loadFrames(spritesFolder .. "sonic_demo.exe/walk/", 6)
 sonic_demoexe.fly = loadFrames(spritesFolder .. "sonic_demo.exe/fly/fly", 2)
 sonic_demoexe.kill_tails = loadFrames(spritesFolder .. "sonic_demo.exe/kill/test/", 7)
+print("thats a lot of anims")
 
 local fire_bg = createCharacter{}
 fire_bg.idle = loadFrames("images/background/fire/", 3)
+print("fire bg")
 
 local sonic_demoexe_screen = createCharacter{x = 0, y = 355}
 sonic_demoexe_screen.idle = love.graphics.newImage(spritesFolder .. "screen/idle.png")
-
+print("sonic demo screen")
 local tail_tails = {
     x = 100,
     y = 50,
@@ -251,7 +269,7 @@ local tail_tails = {
     height = 32
 }
 tail_tails.idle = loadFrames(spritesFolder .. "tail/", 5)
-
+print("im only really doing this because when testing the game\nit just opens a window, crashes, closes, then finally runs the game.\ni'm only logging to see whats happening. i'm just gonna tell you when the game is done initialising.")
 local menuShrink = 1
 local menuAlpha = 1
 local shrinkingMenu = false
@@ -347,6 +365,7 @@ function love.load()
         vsync = true,
         highdpi = true,
     })
+    print("DONE!! FINALLY. ok enjoy the game")
     love.window.setTitle("SONIC 2 3 1")
     canvas = love.graphics.newCanvas(base_width, base_height)
     updateCanvasScale()
