@@ -326,7 +326,8 @@ local joystick = {
     x = 4, y = base_height - 45,
     radius = 60,
     active = false,
-    dx = 0
+    dx = 0,
+    dy = 0
 }
 
 local jumpButton = {
@@ -334,6 +335,10 @@ local jumpButton = {
     radius = 50,
     active = false
 }
+
+joystickBaseImage = love.graphics.newImage("images/mobile_stuff/base.png")
+joystickKnobImage = love.graphics.newImage("images/mobile_stuff/knob.png")
+jumpButtonImage = love.graphics.newImage("images/mobile_stuff/jump.png")
 
 function love.load()
     love.window.setMode(base_width * 2, base_height * 2, {
@@ -601,7 +606,6 @@ function getControls()
     local moveRight = love.keyboard.isDown("right") or joystick.dx > 0.2
     local moveLeft = love.keyboard.isDown("left")  or joystick.dx < -0.2
     local jump = love.keyboard.isDown("space") or jumpButton.active
-
     local lookUp = love.keyboard.isDown("up") or (joystick.dy < -0.2 and not jump)
     local lookDown = love.keyboard.isDown("down") and not jump or (joystick.dy > 0.2 and not jump)
     local fallThroughInput = love.keyboard.isDown("down") and jump or (joystick.dy > 0.2 and jump)
