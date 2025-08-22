@@ -4,7 +4,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "test"
+local gamestate = "menuscreen"
 
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
