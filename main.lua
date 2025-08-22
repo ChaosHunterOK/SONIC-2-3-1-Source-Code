@@ -320,6 +320,21 @@ local credits_y = 0
 local line_height = 20
 local message_alpha = 0
 
+local touches = {}
+
+local joystick = {
+    x = 4, y = base_height - 45,
+    radius = 60,
+    active = false,
+    dx = 0
+}
+
+local jumpButton = {
+    x = base_width - 80, y = base_height - 45,
+    radius = 50,
+    active = false
+}
+
 function love.load()
     love.window.setMode(base_width * 2, base_height * 2, {
         fullscreen = false,
@@ -582,6 +597,18 @@ function torture(dt)
     end
 end
 
+function getControls()
+    local moveRight = love.keyboard.isDown("right") or joystick.dx > 0.2
+    local moveLeft = love.keyboard.isDown("left")  or joystick.dx < -0.2
+    local jump = love.keyboard.isDown("space") or jumpButton.active
+
+    local lookUp = love.keyboard.isDown("up") or (joystick.dy < -0.2 and not jump)
+    local lookDown = love.keyboard.isDown("down") and not jump or (joystick.dy > 0.2 and not jump)
+    local fallThroughInput = love.keyboard.isDown("down") and jump or (joystick.dy > 0.2 and jump)
+
+    return moveRight, moveLeft, jump, lookUp, lookDown, fallThroughInput
+end
+
 local function test_update(dt, char, map)
     local mapWidth = map.width or 2000
     local mapHeight = map.height or 1080
@@ -604,12 +631,8 @@ local function test_update(dt, char, map)
         updateSprite(dt * 0.5, tail_tails.idle, tail_tails)
     end
 
-    local moveRight = love.keyboard.isDown("right")
-    local moveLeft = love.keyboard.isDown("left")
-    local jump = love.keyboard.isDown("space") or love.keyboard.isDown("a")
-    local lookUp = love.keyboard.isDown("up")
-    local lookDown = love.keyboard.isDown("down") and not jump
-    local fallThroughInput = love.keyboard.isDown("down") and jump
+    --for joystick thing
+    local moveRight, moveLeft, jump, lookUp, lookDown, fallThroughInput = getControls()
 
     if char.grounded and (lookUp or lookDown) then
         char.velocity.x = 0
@@ -1084,9 +1107,9 @@ function triggerStageTitle()
 end
 
 local loadingStages = {
-    "Loading for codes...",
-    "Loading for images...",
-    "Loading for sounds...",
+    "Loading codes...",
+    "Loading images...",
+    "Loading sounds & music...",
     "Loading frame animations..."
 }
 local currentStage = 1
@@ -2166,4 +2189,13 @@ function love.keypressed(key)
         openURL("https://docs.google.com/document/d/1J0nOXnQMULgsqhbdnPfF3uHCHJ0wMvX1BC4TgXKVpX8")
         love.event.quit()
     end
+end
+
+function love.touchpressed(id, x, y)
+end
+
+function love.touchmoved(id, x, y)
+end
+
+function love.touchreleased(id, x, y)
 end
