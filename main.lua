@@ -221,7 +221,7 @@ tails.walk = loadFrames(spritesFolder .. "tails/walking/", 8)
 tails.jump = loadFrames(spritesFolder .. "tails/jump/", 3)
 tails.run = loadFrames(spritesFolder .. "tails/run/", 2)
 
-local knuckles = createCharacter{ x = 100, y = 50 }
+local knuckles = createCharacter{ x = 100, y = 50, maxSpeed = 400 }
 knuckles.idle = love.graphics.newImage(spritesFolder .. "knuckles/idle.png")
 knuckles.walk = loadFrames(spritesFolder .. "knuckles/walking/", 7)
 knuckles.run = loadFrames(spritesFolder .. "knuckles/run/", 4)
