@@ -214,7 +214,7 @@ stage2_vis = true
 stage3 = love.graphics.newImage(spritesFolder.."sonic_demo.exe/anim/knuckles/stage3.png")
 stage3_vis = true
 
-local tails = createCharacter{ x = 100, y = 50 }
+local tails = createCharacter{ x = 100, y = 50, maxSpeed = 400 }
 tails.idle = love.graphics.newImage(spritesFolder .. "tails/idle.png")
 tails.down = love.graphics.newImage(spritesFolder .. "tails/down/1.png")
 tails.walk = loadFrames(spritesFolder .. "tails/walking/", 8)
