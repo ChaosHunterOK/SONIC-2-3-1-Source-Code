@@ -917,6 +917,7 @@ function eggman_up(dt)
         if not crashing and dx < triggerDistance and dy < triggerDistance then
             crashing = true
             crashTimer = 0
+            love.window.setTitle("SONIC 2 3 1 (Not responding.)")
             if not error_sound_played then
                 sounds.error_sound:play()
                 error_sound_played = true
@@ -1334,6 +1335,7 @@ function love.update(dt)
 
             if crashTimer >= crashDuration then
                 gamestate = "cheating"
+                love.window.setTitle("SONIC 2 3 1")
                 crashing = false
                 crashTimer = 0
                 crashAlpha = 0
