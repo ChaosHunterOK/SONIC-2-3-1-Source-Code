@@ -327,6 +327,8 @@ local credits_y = 0
 local line_height = 20
 local message_alpha = 0
 
+local SCALE = 2
+
 local touches = {}
 
 local joystick = {
@@ -348,7 +350,7 @@ joystickKnobImage = love.graphics.newImage("images/mobile_stuff/knob.png")
 jumpButtonImage = love.graphics.newImage("images/mobile_stuff/jump.png")
 
 function love.load()
-    love.window.setMode(base_width * 2, base_height * 2, {
+    love.window.setMode(base_width * SCALE, base_height * SCALE, {
         fullscreen = false,
         resizable = false,
         vsync = true,
@@ -1795,30 +1797,31 @@ end
 
 function mobile_stuff_draw()
     love.graphics.setColor(1, 1, 1)
+
     love.graphics.draw(
         joystickBaseImage,
-        joystick.x - joystickBaseImage:getWidth(),
-        joystick.y - joystickBaseImage:getHeight(),
+        joystick.x - joystickBaseImage:getWidth() / 2,
+        joystick.y - joystickBaseImage:getHeight() / 2,
         0,
-        2, 2
+        SCALE, SCALE
     )
 
     local knobX = joystick.x + joystick.dx * joystick.radius
     local knobY = joystick.y + joystick.dy * joystick.radius
     love.graphics.draw(
         joystickKnobImage,
-        knobX - joystickKnobImage:getWidth(),
-        knobY - joystickKnobImage:getHeight(),
+        knobX - joystickKnobImage:getWidth() / 2,
+        knobY - joystickKnobImage:getHeight() / 2,
         0,
-        2, 2
+        SCALE, SCALE
     )
 
     love.graphics.draw(
         jumpButtonImage,
-        jumpButton.x - jumpButtonImage:getWidth(),
-        jumpButton.y - jumpButtonImage:getHeight(),
+        jumpButton.x - jumpButtonImage:getWidth() / 2,
+        jumpButton.y - jumpButtonImage:getHeight() / 2,
         0,
-        2, 2
+        SCALE, SCALE
     )
 end
 
@@ -2279,25 +2282,23 @@ function love.keypressed(key)
     end
 end
 
-local SCALE = 4
-
 function love.touchpressed(id, x, y)
     if not isMobile then return end
+
+    x = (x - offset_x) / scale_factor
+    y = (y - offset_y) / scale_factor
+
     touches[id] = {x=x, y=y}
 
-    local joyLeft = joystick.x - joystickBaseImage:getWidth() * SCALE
-    local joyTop = joystick.y - joystickBaseImage:getHeight() * SCALE
-    local joyRight = joystick.x
-    local joyBottom = joystick.y
-    if x >= joyLeft and x <= joyRight and y >= joyTop and y <= joyBottom then
+    local dx = x - joystick.x
+    local dy = y - joystick.y
+    if dx*dx + dy*dy <= (joystick.radius * 2)^2 then
         joystick.active = true
     end
 
-    local jumpLeft = jumpButton.x - jumpButtonImage:getWidth() * SCALE
-    local jumpTop = jumpButton.y - jumpButtonImage:getHeight() * SCALE
-    local jumpRight = jumpButton.x
-    local jumpBottom = jumpButton.y
-    if x >= jumpLeft and x <= jumpRight and y >= jumpTop and y <= jumpBottom then
+    local dxj = x - jumpButton.x
+    local dyj = y - jumpButton.y
+    if dxj*dxj + dyj*dyj <= (jumpButton.radius * 2)^2 then
         jumpButton.active = true
     end
 
@@ -2308,16 +2309,26 @@ function love.touchpressed(id, x, y)
         end
     end
 end
+
 function love.touchmoved(id, x, y)
-    if not isMobile then return end
-    if touches[id] then
-        touches[id].x, touches[id].y = x, y
-        if joystick.active then
-            local dx = x - joystick.x
-            local dy = y - joystick.y
-            joystick.dx = math.max(-1, math.min(1, dx / joystick.radius))
-            joystick.dy = math.max(-1, math.min(1, dy / joystick.radius))
+    if not isMobile or not touches[id] then return end
+
+    x = (x - offset_x) / scale_factor
+    y = (y - offset_y) / scale_factor
+
+    touches[id].x, touches[id].y = x, y
+
+    if joystick.active then
+        local dx = x - joystick.x
+        local dy = y - joystick.y
+        local len = math.sqrt(dx*dx + dy*dy)
+        local maxDist = joystick.radius
+        if len > maxDist then
+            dx = dx / len * maxDist
+            dy = dy / len * maxDist
         end
+        joystick.dx = dx / joystick.radius
+        joystick.dy = dy / joystick.radius
     end
 end
 
