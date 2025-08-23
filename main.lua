@@ -169,7 +169,8 @@ local function createCharacter(opts)
         lastGroundedY = 0,
         spriteIndex = 1,
         currentSprite = nil,
-        startedChase = false
+        startedChase = false,
+        randomJumpTimer = 0,
     }
 end
 
@@ -831,6 +832,9 @@ demo_vis = false
 
 local demo_speed = 400
 local previousDirection = sonic_demoexe.direction
+
+local jumpTimer = 0
+local jumpInterval = 1
 function knuck_up(dt)
     updateSprite(dt, s1.stage2, s1)
 
@@ -866,6 +870,18 @@ function knuck_up(dt)
             if sonic_demoexe.direction ~= previousDirection then
                 demo_speed = math.random(375, 400)
                 previousDirection = sonic_demoexe.direction
+            end
+        end
+
+        sonic_demoexe.velocity.x = demo_speed * sonic_demoexe.direction
+
+        jumpTimer = jumpTimer + dt
+        if jumpTimer >= jumpInterval then
+            jumpTimer = 0
+            local chance = math.random()
+            if chance <= 0.4 and not sonic_demoexe.jumping then
+                sonic_demoexe.velocity.y = sonic_demoexe.jumpHeight
+                sonic_demoexe.jumping = true
             end
         end
         test_update(dt, sonic_demoexe, map2)
