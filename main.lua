@@ -1887,8 +1887,8 @@ function mobile_stuff_draw()
     local knobY = joystick.y + joystick.dy * joystick.radius
     love.graphics.draw(
         joystickKnobImage,
-        knobX - joystickKnobImage:getWidth() / 2,
-        knobY - joystickKnobImage:getHeight() / 2,
+        knobX - joystickKnobImage:getWidth() / 2 * SCALE,
+        knobY - joystickKnobImage:getHeight() / 2 * SCALE,
         0,
         SCALE, SCALE
     )
@@ -1908,6 +1908,32 @@ function love.draw()
     love.graphics.rectangle("fill", 0, 0, base_width * 2, base_height * 2)
     love.graphics.setColor(1, 1, 1)
 
+    local function drawStageTitle(titleImg, circlesImg, actImg)
+        if showStageTitle then
+            local alpha = 1
+            if stageTitleTimer > stageTitleDuration - stageTitleFadeTime then
+                alpha = (stageTitleDuration - stageTitleTimer) / stageTitleFadeTime
+            end
+            alpha = clamp(alpha, 0, 1)
+
+            love.graphics.setColor(0, 0, 0, alpha)
+            love.graphics.rectangle("fill", 0, 0, base_width, base_height)
+            love.graphics.setColor(1, 1, 1, 1)
+
+            local enterProgress = math.min(stageTitleTimer / stageTitleFadeTime, 1)
+            local startX, endX = -100, base_width / 2 - (titleImg:getWidth() / 2) - 60
+            local slideX = lerp(startX, endX, linearTime(enterProgress))
+
+            if stageTitleTimer > stageTitleDuration - stageTitleFadeTime then
+                local exitProgress = 1 - ((stageTitleDuration - stageTitleTimer) / stageTitleFadeTime)
+                slideX = lerp(endX, base_width + 130, linearTime(exitProgress))
+            end
+
+            local y = base_height / 2 - 40
+            drawTitleCard(titleImg, circlesImg, actImg, slideX, y)
+        end
+    end
+
     if gamestate == "menuscreen" or gamestate == "selection" then
         local mouseX, mouseY = love.mouse.getPosition()
         mouseX = (mouseX - offset_x) / scale_factor
@@ -1919,220 +1945,79 @@ function love.draw()
 
     if gamestate == "menuscreen" then
         draw_menuscreen()
-        love.graphics.setColor(1, 1, 1)
-    end
-    if gamestate == "test" then
+    elseif gamestate == "test" then
         sounds.buildUPSound:stop()
         sounds.green_hill:play()
         love.graphics.setColor(currentColor)
         drawScrollingBG(emhi_bg, bgX1, bgX2, 0, 0)
-        love.graphics.setColor(1,1,1,1)
+        love.graphics.setColor(1, 1, 1)
+
         love.graphics.push()
         love.graphics.translate(-math.floor(camera.x), -math.floor(camera.y))
         love.graphics.draw(test2, 0, 0)
-        love.graphics.setColor(1, 1, 1)
 
         if sonic_demoexe.currentSprite then
-            love.graphics.draw(
-                sonic_demoexe.currentSprite,
-                10928,
-                730
-            )
+            love.graphics.draw(sonic_demoexe.currentSprite, 10928, 730)
         end
+
         tails_tail_thing()
-        char_draw(tails, 0 , 2)
-
+        char_draw(tails, 0, 2)
         love.graphics.pop()
+
         drawStats()
-
-        if showStageTitle then
-            local alpha = 1
-            if stageTitleTimer > stageTitleDuration - stageTitleFadeTime then
-                alpha = (stageTitleDuration - stageTitleTimer) / stageTitleFadeTime
-            end
-            alpha = clamp(alpha, 0, 1)
-
-            love.graphics.setColor(0, 0, 0, alpha)
-            love.graphics.rectangle("fill", 0, 0, base_width, base_height)
-            love.graphics.setColor(1, 1, 1, 1)
-            local enterProgress = math.min(stageTitleTimer / stageTitleFadeTime, 1)
-            local startX = -100
-            local endX = base_width / 2 - (greenHillZoneTitle:getWidth() / 2) - 60
-            local slideX = lerp(startX, endX, linearTime(enterProgress))
-
-            if stageTitleTimer > stageTitleDuration - stageTitleFadeTime then
-                local exitProgress = 1 - ((stageTitleDuration - stageTitleTimer) / stageTitleFadeTime)
-                slideX = lerp(endX, base_width + 130, linearTime(exitProgress))
-            end
-
-            local y = base_height / 2 - 40
-
-            drawTitleCard(greenHillZoneTitle, greenHillZoneCircles, stageActImg1, slideX, y)
-            love.graphics.setColor(1, 1, 1, 1)
-        end
-    end
-
-    if gamestate == "hs" then
+        drawStageTitle(greenHillZoneTitle, greenHillZoneCircles, stageActImg1)
+    elseif gamestate == "hs" then
         love.graphics.push()
-        --sounds.flames:play()
         if bushes_destroyed then
-            love.graphics.draw(
-                fire_bg.currentSprite,
-                0,
-                0
-            )
+            love.graphics.draw(fire_bg.currentSprite, 0, 0)
         end
         love.graphics.translate(-math.floor(camera.x), -math.floor(camera.y))
         love.graphics.draw(test3, 0, 0)
-        love.graphics.setColor(1, 1, 1)
+
         if not tails_caught and tails.currentSprite then
             tails_tail_thing()
             char_draw(tails, 0, 2)
         end
+
         for _, bush in ipairs(bushes) do
             love.graphics.draw(bush_img, bush.x, bush.y)
         end
-        --if sonic_demoexe.startedChase then
-        char_draw(sonic_demoexe, 0, 2)
-        --end
 
+        char_draw(sonic_demoexe, 0, 2)
         love.graphics.pop()
+
         drawStats()
 
-        local timerText = string.format("HIDING TIME LEFT: %.1f", hs_timer)
-        local timerWidth = love.graphics.getFont():getWidth(timerText)
-    
         if not bushes_destroyed then
+            local timerText = string.format("HIDING TIME LEFT: %.1f", hs_timer)
+            local timerWidth = love.graphics.getFont():getWidth(timerText)
             love.graphics.setColor(0, 0, 0)
-            love.graphics.print(timerText, (base_width - timerWidth) - 17, 30 + 3)
-        
+            love.graphics.print(timerText, base_width - timerWidth - 17, 33)
             love.graphics.setColor(1, 1, 0)
-            love.graphics.print(timerText, (base_width - timerWidth) - 20, 30)
+            love.graphics.print(timerText, base_width - timerWidth - 20, 30)
         end
-        love.graphics.setColor(1, 1, 1, 1)
-        if showStageTitle then
-            local alpha = 1
-            if stageTitleTimer > stageTitleDuration - stageTitleFadeTime then
-                alpha = (stageTitleDuration - stageTitleTimer) / stageTitleFadeTime
-            end
-            alpha = clamp(alpha, 0, 1)
 
-            love.graphics.setColor(0, 0, 0, alpha)
-            love.graphics.rectangle("fill", 0, 0, base_width, base_height)
-            love.graphics.setColor(1, 1, 1, 1)
-            local enterProgress = math.min(stageTitleTimer / stageTitleFadeTime, 1)
-            local startX = -100
-            local endX = base_width / 2 - (greenHillZoneTitle:getWidth() / 2) - 60
-            local slideX = lerp(startX, endX, linearTime(enterProgress))
-
-            if stageTitleTimer > stageTitleDuration - stageTitleFadeTime then
-                local exitProgress = 1 - ((stageTitleDuration - stageTitleTimer) / stageTitleFadeTime)
-                slideX = lerp(endX, base_width + 130, linearTime(exitProgress))
-            end
-
-            local y = base_height / 2 - 40
-
-            drawTitleCard(hideAndSeekZoneTitle, hideAndSeekZoneCircles, stageActImg2, slideX, y)
-            love.graphics.setColor(1, 1, 1, 1)
-        end
+        drawStageTitle(hideAndSeekZoneTitle, hideAndSeekZoneCircles, stageActImg2)
 
         if show_black_screen then
             love.graphics.setColor(0, 0, 0, 1)
             love.graphics.rectangle("fill", 0, 0, base_width, base_height)
-            love.graphics.setColor(1, 1, 1, 1)
         end
-    end
-
-    if gamestate == "knuck" then
+    elseif gamestate == "knuck" then
         love.graphics.push()
         drawScrollingBG(knuck_bg, bgX1, bgX2, 0, 0)
         love.graphics.translate(-math.floor(camera.x), -math.floor(camera.y))
         love.graphics.draw(knuck1)
         char_draw(knuckles, 0, -2)
 
-        if demo_vis then
-            char_draw(sonic_demoexe, 0, -2)
-        end
-        if stage1_vis then
-            love.graphics.draw(stage1, 2544, 518)
-        end
-
-        if stage2_vis then
-            if s1.currentSprite then
-                love.graphics.draw(s1.currentSprite, 4387, 864, 0, 1, 1)
-            else
-                print("idk")
-            end
-        end
-
-        if stage3_vis then
-            love.graphics.draw(stage3, 5481, 867)
-        end
-
-        if stage1_vis == false then
-            if not soundPlayed10 then
-            sounds.rebootSound:play()
-            flashScreen(0.45)
-            soundPlayed10 = true
-            end
-        end
-
-        if stage3_vis == false then
-            if not soundPlayed8 then
-            sounds.rebootSound:play()
-            flashScreen(0.45)
-            soundPlayed8 = true
-            end
-        end
-        
-        if stage2_vis == false then
-            if not soundPlayed9 then
-            sounds.rebootSound:play()
-            flashScreen(0.45)
-            soundPlayed9 = true
-            end
-        end
-
-        if idk_fix then
-            --if knuckles.x < 5927 then
-                --knuckles.x = knuckles.x + 15
-                if knuckles.x < 5991 then
-                    knuckles.x = 5991
-                    knuckles.velocity.x = math.max(0, knuckles.velocity.x)
-                end
-            --end
-        end
+        if demo_vis then char_draw(sonic_demoexe, 0, -2) end
+        if stage1_vis then love.graphics.draw(stage1, 2544, 518) end
+        if stage2_vis and s1.currentSprite then love.graphics.draw(s1.currentSprite, 4387, 864) end
+        if stage3_vis then love.graphics.draw(stage3, 5481, 867) end
         love.graphics.pop()
         drawStats()
-        if showStageTitle then
-            local alpha = 1
-            if stageTitleTimer > stageTitleDuration - stageTitleFadeTime then
-                alpha = (stageTitleDuration - stageTitleTimer) / stageTitleFadeTime
-            end
-            alpha = clamp(alpha, 0, 1)
-
-            love.graphics.setColor(0, 0, 0, alpha)
-            love.graphics.rectangle("fill", 0, 0, base_width, base_height)
-            love.graphics.setColor(1, 1, 1, 1)
-            local enterProgress = math.min(stageTitleTimer / stageTitleFadeTime, 1)
-            local startX = -100
-            local endX = base_width / 2 - (greenHillZoneTitle:getWidth() / 2) - 60
-            local slideX = lerp(startX, endX, linearTime(enterProgress))
-
-            if stageTitleTimer > stageTitleDuration - stageTitleFadeTime then
-                local exitProgress = 1 - ((stageTitleDuration - stageTitleTimer) / stageTitleFadeTime)
-                slideX = lerp(endX, base_width + 130, linearTime(exitProgress))
-            end
-
-            local y = base_height / 2 - 40
-
-            drawTitleCard(greenHillZoneTitle, hideAndSeekZoneCircles, stageActImg1, slideX, y)
-            love.graphics.setColor(1, 1, 1, 1)
-        end
-    end
-
-    if gamestate == "eggman" then
-        menu = love.graphics.newImage("images/background/menu.png")
+        drawStageTitle(greenHillZoneTitle, hideAndSeekZoneCircles, stageActImg1)
+    elseif gamestate == "eggman" then
         drawScrollingBG(menu, bgX1, bgX2, 0, 0)
         love.graphics.push()
         love.graphics.translate(-math.floor(camera.x), -math.floor(camera.y))
@@ -2142,37 +2027,53 @@ function love.draw()
         char_draw(eggman, 0, -8)
         love.graphics.pop()
         drawStats()
-        if showStageTitle then
-            local alpha = 1
-            if stageTitleTimer > stageTitleDuration - stageTitleFadeTime then
-                alpha = (stageTitleDuration - stageTitleTimer) / stageTitleFadeTime
-            end
-            alpha = clamp(alpha, 0, 1)
-
-            love.graphics.setColor(0, 0, 0, alpha)
-            love.graphics.rectangle("fill", 0, 0, base_width, base_height)
-            love.graphics.setColor(1, 1, 1, 1)
-            local enterProgress = math.min(stageTitleTimer / stageTitleFadeTime, 1)
-            local startX = -100
-            local endX = base_width / 2 - (greenHillZoneTitle:getWidth() / 2) - 60
-            local slideX = lerp(startX, endX, linearTime(enterProgress))
-
-            if stageTitleTimer > stageTitleDuration - stageTitleFadeTime then
-                local exitProgress = 1 - ((stageTitleDuration - stageTitleTimer) / stageTitleFadeTime)
-                slideX = lerp(endX, base_width + 130, linearTime(exitProgress))
-            end
-
-            local y = base_height / 2 - 40
-
-            drawTitleCard(greenHillZoneTitle, hideAndSeekZoneCircles, stageActImg1, slideX, y)
-            love.graphics.setColor(1, 1, 1, 1)
-        end
+        drawStageTitle(greenHillZoneTitle, hideAndSeekZoneCircles, stageActImg1)
 
         if crashing then
             love.graphics.setColor(1, 1, 1, crashAlpha)
             love.graphics.rectangle("fill", 0, 0, base_width, base_height)
-            love.graphics.setColor(1, 1, 1, 1)
         end
+    elseif gamestate == "torture" and tort_visible then
+        love.graphics.setColor(1, 1, 1, 0.355)
+        if sonic_demoexe_screen.currentSprite then
+            love.graphics.draw(sonic_demoexe_screen.currentSprite)
+        end
+        love.graphics.setColor(1, 1, 1, 1)
+        local t = love.timer.getTime()
+        love.graphics.print("Ready to be", 125, 50 + math.sin(t*2)*2)
+        love.graphics.print("Tortured?", 285, 200 + math.sin(t*2.2)*3)
+    elseif gamestate == "selection" then
+        selection()
+    elseif gamestate == "william" then
+        draw_william()
+    elseif gamestate == "error" then
+        love.graphics.clear(0,0,0,1)
+        if reboot_vis and not rebootDone then
+            for i = 1, currentStage do
+                local stageText = loadingStages[i]
+                local text = i < currentStage and stageText.." 100%" or stageText.." "..math.floor(stageProgress).."%"
+                love.graphics.print(text, 20, 20 + (i-1)*20)
+            end
+        elseif rebootDone then
+            love.graphics.setColor(0, 0, 0, fadeBlack)
+            love.graphics.rectangle("fill", 0, 0, base_width, base_height)
+            if fadeBlack >= 1 then
+                love.graphics.setFont(FontBig)
+                love.graphics.setColor(0.045, 0.045, 0.045, helloFade)
+                local text = "HELLO WILLIAM."
+                love.graphics.print(text, base_width/2 - FontBig:getWidth(text)/2, base_height/2 - FontBig:getHeight()/2)
+            end
+        else
+            love.graphics.setFont(FontBig)
+            love.graphics.print("An Error has Occurred.", 20, 20)
+        end
+    elseif gamestate == "credits" then
+        for i, line in ipairs(credits_text) do
+            love.graphics.printf(line, 10, credits_y + (i - 1) * line_height, base_width - 20, "center")
+        end
+    elseif gamestate == "doc" then
+        love.graphics.setColor(1,1,1,message_alpha)
+        love.graphics.printf("Press Enter to open the Document", 0, base_height/2, base_width, "center")
     end
 
     if gamestate == "torture" then
@@ -2196,67 +2097,16 @@ function love.draw()
         end
     end
 
-    if gamestate == "selection" then
-        selection()
-    elseif gamestate == "william" then
-        draw_william()
-    end
-
-    if gamestate == "error" then
-        love.graphics.clear(0, 0, 0, 1)
-
-        if reboot_vis and not rebootDone then
-            --love.graphics.setFont(FontSmall)
-            for i = 1, currentStage do
-                local stageText = loadingStages[i]
-                if i < currentStage then
-                    love.graphics.print(stageText .. " 100%", 20, 20 + (i-1)*20)
-                elseif i == currentStage then
-                    love.graphics.print(stageText .. " " .. math.floor(stageProgress) .. "%", 20, 20 + (i-1)*20)
-                end
-            end
-        elseif rebootDone then
-            love.graphics.setColor(0, 0, 0, fadeBlack)
-            love.graphics.rectangle("fill", 0, 0, base_width, base_height)
-            love.graphics.setColor(1, 1, 1, 1)
-
-            if fadeBlack >= 1 then
-                love.graphics.setFont(FontBig)
-                love.graphics.setColor(0.045, 0.045, 0.045, helloFade)
-                local text = "HELLO WILLIAM."
-                local textWidth = FontBig:getWidth(text)
-                local textHeight = FontBig:getHeight()
-                love.graphics.print(text, base_width/2 - textWidth/2, base_height/2 - textHeight/2)
-                love.graphics.setColor(1, 1, 1, 1)
-            end
-        else
-            love.graphics.setFont(FontBig)
-            love.graphics.print("An Error has Occurred.", 20, 20)
-        end
-    end
-
-    if gamestate == "credits" then
-        for i, line in ipairs(credits_text) do
-            local y = credits_y + (i - 1) * line_height
-            love.graphics.printf(line, 10, y, base_width - 20, "center")
-        end
-    elseif gamestate == "doc" then
-        love.graphics.setColor(1, 1, 1, message_alpha)
-        love.graphics.printf("Press Enter to open the Document", 0, base_height / 2, base_width, "center")
-    end
-
     if transitionAlpha > 0 then
         love.graphics.setColor(0, 0, 0, transitionAlpha)
         love.graphics.rectangle("fill", 0, 0, base_width * 2, base_height * 2)
-        love.graphics.setColor(1, 1, 1)
     end
-    --love.graphics.print(tails_caught_timer)
     if isFlashing then
         love.graphics.setColor(1, 1, 1, flashAlpha)
         love.graphics.rectangle("fill", 0, 0, base_width * 2, base_height * 2)
-        love.graphics.setColor(1, 1, 1, 1)
     end
 
+    love.graphics.setColor(1, 1, 1, 1)
     if isMobile then
         mobile_stuff_draw()
     end
@@ -2374,23 +2224,14 @@ function love.touchpressed(id, x, y)
 
     touches[id] = {x=x, y=y}
 
-    local dx = x - joystick.x
-    local dy = y - joystick.y
-    if dx*dx + dy*dy <= (joystick.radius * 2)^2 then
+    if x <= base_width / 2 then
         joystick.active = true
+        joystick.dx = (x - joystick.x) / joystick.radius
+        joystick.dy = (y - joystick.y) / joystick.radius
     end
 
-    local dxj = x - jumpButton.x
-    local dyj = y - jumpButton.y
-    if dxj*dxj + dyj*dyj <= (jumpButton.radius * 2)^2 then
+    if x > base_width / 2 then
         jumpButton.active = true
-    end
-
-    if splash_done and finished_transformation then
-        shrinkingMenu = true
-        if sounds.laugh_sound then
-            sounds.laugh_sound:play()
-        end
     end
 end
 
@@ -2402,7 +2243,7 @@ function love.touchmoved(id, x, y)
 
     touches[id].x, touches[id].y = x, y
 
-    if joystick.active then
+    if joystick.active and x <= base_width / 2 then
         local dx = x - joystick.x
         local dy = y - joystick.y
         local len = math.sqrt(dx*dx + dy*dy)
@@ -2419,8 +2260,20 @@ end
 function love.touchreleased(id, x, y)
     if not isMobile then return end
     touches[id] = nil
-    joystick.active = false
-    joystick.dx = 0
-    joystick.dy = 0
-    jumpButton.active = false
+
+    local leftActive, rightActive = false, false
+    for _, t in pairs(touches) do
+        if t.x <= base_width / 2 then leftActive = true end
+        if t.x > base_width / 2 then rightActive = true end
+    end
+
+    if not leftActive then
+        joystick.active = false
+        joystick.dx = 0
+        joystick.dy = 0
+    end
+
+    if not rightActive then
+        jumpButton.active = false
+    end
 end
