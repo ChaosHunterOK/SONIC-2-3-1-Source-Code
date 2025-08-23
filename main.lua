@@ -1945,6 +1945,7 @@ function love.draw()
 
     if gamestate == "menuscreen" then
         draw_menuscreen()
+        love.graphics.setColor(1, 1, 1)
     elseif gamestate == "test" then
         sounds.buildUPSound:stop()
         sounds.green_hill:play()
@@ -1966,6 +1967,7 @@ function love.draw()
 
         drawStats()
         drawStageTitle(greenHillZoneTitle, greenHillZoneCircles, stageActImg1)
+        love.graphics.setColor(1, 1, 1)
     elseif gamestate == "hs" then
         love.graphics.push()
         if bushes_destroyed then
@@ -2003,6 +2005,7 @@ function love.draw()
             love.graphics.setColor(0, 0, 0, 1)
             love.graphics.rectangle("fill", 0, 0, base_width, base_height)
         end
+        love.graphics.setColor(1, 1, 1)
     elseif gamestate == "knuck" then
         love.graphics.push()
         drawScrollingBG(knuck_bg, bgX1, bgX2, 0, 0)
@@ -2014,9 +2017,41 @@ function love.draw()
         if stage1_vis then love.graphics.draw(stage1, 2544, 518) end
         if stage2_vis and s1.currentSprite then love.graphics.draw(s1.currentSprite, 4387, 864) end
         if stage3_vis then love.graphics.draw(stage3, 5481, 867) end
+
+        if stage1_vis == false then
+            if not soundPlayed10 then
+            sounds.rebootSound:play()
+            flashScreen(0.45)
+            soundPlayed10 = true
+            end
+        end
+
+        if stage3_vis == false then
+            if not soundPlayed8 then
+            sounds.rebootSound:play()
+            flashScreen(0.45)
+            soundPlayed8 = true
+            end
+        end
+        
+        if stage2_vis == false then
+            if not soundPlayed9 then
+            sounds.rebootSound:play()
+            flashScreen(0.45)
+            soundPlayed9 = true
+            end
+        end
+
+        if idk_fix then
+            if knuckles.x < 5991 then
+                knuckles.x = 5991
+                knuckles.velocity.x = math.max(0, knuckles.velocity.x)
+            end
+        end
         love.graphics.pop()
         drawStats()
         drawStageTitle(greenHillZoneTitle, hideAndSeekZoneCircles, stageActImg1)
+        love.graphics.setColor(1, 1, 1)
     elseif gamestate == "eggman" then
         drawScrollingBG(menu, bgX1, bgX2, 0, 0)
         love.graphics.push()
@@ -2033,6 +2068,7 @@ function love.draw()
             love.graphics.setColor(1, 1, 1, crashAlpha)
             love.graphics.rectangle("fill", 0, 0, base_width, base_height)
         end
+        love.graphics.setColor(1, 1, 1)
     elseif gamestate == "torture" and tort_visible then
         love.graphics.setColor(1, 1, 1, 0.355)
         if sonic_demoexe_screen.currentSprite then
@@ -2042,10 +2078,13 @@ function love.draw()
         local t = love.timer.getTime()
         love.graphics.print("Ready to be", 125, 50 + math.sin(t*2)*2)
         love.graphics.print("Tortured?", 285, 200 + math.sin(t*2.2)*3)
+        love.graphics.setColor(1, 1, 1)
     elseif gamestate == "selection" then
         selection()
+        love.graphics.setColor(1, 1, 1)
     elseif gamestate == "william" then
         draw_william()
+        love.graphics.setColor(1, 1, 1)
     elseif gamestate == "error" then
         love.graphics.clear(0,0,0,1)
         if reboot_vis and not rebootDone then
@@ -2067,6 +2106,7 @@ function love.draw()
             love.graphics.setFont(FontBig)
             love.graphics.print("An Error has Occurred.", 20, 20)
         end
+        love.graphics.setColor(1, 1, 1)
     elseif gamestate == "credits" then
         for i, line in ipairs(credits_text) do
             love.graphics.printf(line, 10, credits_y + (i - 1) * line_height, base_width - 20, "center")
@@ -2074,27 +2114,6 @@ function love.draw()
     elseif gamestate == "doc" then
         love.graphics.setColor(1,1,1,message_alpha)
         love.graphics.printf("Press Enter to open the Document", 0, base_height/2, base_width, "center")
-    end
-
-    if gamestate == "torture" then
-        if tort_visible then
-            love.graphics.setColor(1, 1, 1, 0.355)
-
-            if sonic_demoexe_screen.currentSprite then
-                love.graphics.draw(sonic_demoexe_screen.currentSprite)
-            end
-
-            love.graphics.setColor(1, 1, 1, 1)
-            local t = love.timer.getTime()
-            local offset1 = math.sin(t * 2) * 2
-            local offset2 = math.sin(t * 2.2) * 3
-
-            local topText = "Ready to be"
-            love.graphics.print(topText, 125, 50 + offset1)
-
-            local bottomText = "Tortured?"
-            love.graphics.print(bottomText, 285, 200 + offset2)
-        end
     end
 
     if transitionAlpha > 0 then
