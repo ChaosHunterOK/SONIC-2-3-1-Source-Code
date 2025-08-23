@@ -4,7 +4,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "knuck"
+local gamestate = "hs"
 
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
@@ -355,6 +355,7 @@ function love.load()
         highdpi = true,
     })
     love.window.setTitle("SONIC 2 3 1")
+    love.window.setIcon(love.image.newImageData("images/game_icon.png"))
     canvas = love.graphics.newCanvas(base_width, base_height)
     updateCanvasScale()
 
@@ -944,8 +945,11 @@ function hide_and_seek(dt)
             sonic_demoexe.x = sonic_demoexe.x + (dx / math.abs(dx)) * 355 * dt
         end
 
-        if dy ~= 0 then
-            local verticalSpeed = 305
+        local dy = tails.y - sonic_demoexe.y
+        local verticalSpeed = 305
+        local deadzone = 10
+
+        if math.abs(dy) > deadzone then
             sonic_demoexe.y = sonic_demoexe.y + (dy / math.abs(dy)) * verticalSpeed * dt
         end
 
