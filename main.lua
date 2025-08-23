@@ -331,7 +331,7 @@ local touches = {}
 
 local joystick = {
     x = 45, y = base_height - 45,
-    radius = 20,
+    radius = 25,
     active = false,
     dx = 0,
     dy = 0
@@ -614,9 +614,9 @@ function getControls()
     local moveRight = love.keyboard.isDown("right") or joystick.dx > 0.2
     local moveLeft = love.keyboard.isDown("left")  or joystick.dx < -0.2
     local jump = love.keyboard.isDown("space") or jumpButton.active
-    local lookUp = love.keyboard.isDown("up") or (joystick.dy < -0.2 and not jump)
-    local lookDown = love.keyboard.isDown("down") and not jump or (joystick.dy > 0.2 and not jump)
-    local fallThroughInput = love.keyboard.isDown("down") and jump or (joystick.dy > 0.2 and jump)
+    local lookUp = love.keyboard.isDown("up") or (joystick.dy < -0.25 and not jump)
+    local lookDown = love.keyboard.isDown("down") and not jump or (joystick.dy > 0.25 and not jump)
+    local fallThroughInput = love.keyboard.isDown("down") and jump or (joystick.dy > 0.25 and jump)
 
     return moveRight, moveLeft, jump, lookUp, lookDown, fallThroughInput
 end
@@ -2279,19 +2279,25 @@ function love.keypressed(key)
     end
 end
 
+local SCALE = 2
+
 function love.touchpressed(id, x, y)
     if not isMobile then return end
     touches[id] = {x=x, y=y}
 
-    local dxJ = x - joystick.x
-    local dyJ = y - joystick.y
-    if dxJ*dxJ + dyJ*dyJ <= (joystick.radius*2)^2 then
+    local joyLeft = joystick.x - joystickBaseImage:getWidth() * SCALE
+    local joyTop = joystick.y - joystickBaseImage:getHeight() * SCALE
+    local joyRight = joystick.x
+    local joyBottom = joystick.y
+    if x >= joyLeft and x <= joyRight and y >= joyTop and y <= joyBottom then
         joystick.active = true
     end
 
-    local dxB = x - jumpButton.x
-    local dyB = y - jumpButton.y
-    if dxB*dxB + dyB*dyB <= (jumpButton.radius*2)^2 then
+    local jumpLeft = jumpButton.x - jumpButtonImage:getWidth() * SCALE
+    local jumpTop = jumpButton.y - jumpButtonImage:getHeight() * SCALE
+    local jumpRight = jumpButton.x
+    local jumpBottom = jumpButton.y
+    if x >= jumpLeft and x <= jumpRight and y >= jumpTop and y <= jumpBottom then
         jumpButton.active = true
     end
 
@@ -2302,7 +2308,6 @@ function love.touchpressed(id, x, y)
         end
     end
 end
-
 function love.touchmoved(id, x, y)
     if not isMobile then return end
     if touches[id] then
