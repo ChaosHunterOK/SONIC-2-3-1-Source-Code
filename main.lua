@@ -4,7 +4,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "hs"
+local gamestate = "test"
 
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
@@ -622,15 +622,13 @@ function getControls()
 end
 
 local function test_update(dt, char, map)
-    local mapWidth = map.width or 2000
+    local mapWidth  = map.width  or 2000
     local mapHeight = map.height or 1080
+    local smoothFactor = 0.085
 
-    local targetX = math.max(0, math.min(mapWidth - base_width, char.x - base_width / 2))
-    local targetY = math.max(0, math.min(mapHeight - base_height, char.y - base_height / 2))
-    targetY = math.max(0, targetY - 30)
-
-    local smoothFactor = 0.09
     if char ~= sonic_demoexe then
+        local targetX = math.max(0, math.min(mapWidth  - base_width,  char.x - base_width  / 2))
+        local targetY = math.max(0, math.min(mapHeight - base_height, char.y - base_height / 2)) - 30
         camera.x = lerp(camera.x, targetX, smoothFactor)
         camera.y = lerp(camera.y, targetY, smoothFactor)
     end
@@ -643,12 +641,11 @@ local function test_update(dt, char, map)
         updateSprite(dt * 0.5, tail_tails.idle, tail_tails)
     end
 
-    --for joystick thing
     local moveRight, moveLeft, jump, lookUp, lookDown, fallThroughInput = getControls()
 
     if char.grounded and (lookUp or lookDown) then
-        char.velocity.x = 0
-        char.spriteIndex = 1
+        char.velocity.x   = 0
+        char.spriteIndex  = 1
         char.currentSprite = lookUp and (char.up or char.idle) or (char.down or char.idle)
         return
     end
@@ -656,8 +653,9 @@ local function test_update(dt, char, map)
     if char ~= sonic_demoexe then
         if moveRight or moveLeft then
             local direction = moveRight and 1 or -1
-            char.direction = direction
-            char.velocity.x = clamp(char.velocity.x + direction * char.acceleration * dt, -char.maxSpeed, char.maxSpeed)
+            char.direction  = direction
+            char.velocity.x = clamp(char.velocity.x + direction * char.acceleration * dt,
+                                    -char.maxSpeed, char.maxSpeed)
 
             if char.jumping then
                 updateSprite(dt, char.jump, char)
@@ -671,32 +669,29 @@ local function test_update(dt, char, map)
             if math.abs(char.velocity.x) <= 2 then
                 char.velocity.x = 0
                 if not char.jumping then
-                    char.spriteIndex = 1
+                    char.spriteIndex  = 1
                     char.currentSprite = char.idle
                 else
                     updateSprite(dt, char.jump, char)
                 end
             else
-                if char.jumping then
-                    updateSprite(dt, char.jump, char)
-                else
-                    updateSprite(dt, char.walk, char)
-                end
+                updateSprite(dt, char.jumping and char.jump or char.walk, char)
             end
         end
 
         if jump and not char.jumping and not fallThroughInput then
-            char.velocity.y = char.jumpHeight
+            char.velocity.y  = char.jumpHeight
             char.spriteIndex = 1
             updateSprite(dt, char.jump, char)
-            char.jumping = true
+            char.jumping  = true
             char.grounded = false
             sounds.jump_sound:play()
         end
     end
 
-    local nextY = char.y + char.velocity.y * dt
     local nextX = char.x + char.velocity.x * dt
+    local nextY = char.y + char.velocity.y * dt
+
     if not checkCollision(char, map, nextX, char.y) then
         char.x = nextX
     else
@@ -709,9 +704,7 @@ local function test_update(dt, char, map)
                 break
             end
         end
-        if not stepped then
-            char.velocity.x = 0
-        end
+        if not stepped then char.velocity.x = 0 end
     end
 
     if fallThroughInput then
@@ -721,38 +714,36 @@ local function test_update(dt, char, map)
         else
             char.y = math.floor(char.y)
             char.velocity.y = 0
-            char.grounded = true
-            char.jumping = false
+            char.grounded   = true
+            char.jumping    = false
+        end
+    elseif char.velocity.y < 0 then
+        if not checkCollision(char, map, char.x, nextY, true) then
+            char.y = nextY
+            char.grounded = false
+        else
+            char.velocity.y = 0
         end
     else
-        if char.velocity.y < 0 then
-            if not checkCollision(char, map, char.x, nextY, true) then
-                char.y = nextY
-                char.grounded = false
-            else
-                char.velocity.y = 0
-            end
+        if not checkCollision(char, map, char.x, nextY) then
+            char.y = nextY
+            char.grounded = false
         else
-            if not checkCollision(char, map, char.x, nextY) then
-                char.y = nextY
-                char.grounded = false
-            else
-                local foundGround = false
-                for i = 0, MAX_STEP_HEIGHT do
-                    if not checkCollision(char, map, char.x, nextY - i) then
-                        char.y = nextY - i
-                        char.velocity.y = 0
-                        char.grounded = true
-                        char.jumping = false
-                        foundGround = true
-                        break
-                    end
-                end
-                if not foundGround then
+            local foundGround = false
+            for i = 0, MAX_STEP_HEIGHT do
+                if not checkCollision(char, map, char.x, nextY - i) then
+                    char.y = nextY - i
                     char.velocity.y = 0
-                    char.grounded = true
-                    char.jumping = false
+                    char.grounded   = true
+                    char.jumping    = false
+                    foundGround = true
+                    break
                 end
+            end
+            if not foundGround then
+                char.velocity.y = 0
+                char.grounded   = true
+                char.jumping    = false
             end
         end
     end
@@ -779,6 +770,7 @@ local function test_update(dt, char, map)
     if char.y >= mapHeight + 40 then
         love.event.quit()
     end
+
     updateGamestate(dt, char)
 end
 
