@@ -2279,7 +2279,7 @@ function love.keypressed(key)
     end
 end
 
-local SCALE = 2
+local SCALE = 1
 
 function love.touchpressed(id, x, y)
     if not isMobile then return end
