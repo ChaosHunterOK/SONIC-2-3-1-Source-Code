@@ -1808,10 +1808,11 @@ function mobile_stuff_draw()
     )
 
     local knobX = joystick.x + joystick.dx * joystick.radius
+    local knobY = joystick.y + joystick.dy * joystick.radius
     love.graphics.draw(
         joystickKnobImage,
         knobX - joystickKnobImage:getWidth(),
-        joystick.y - joystickKnobImage:getHeight(),
+        knobY - joystickKnobImage:getHeight(),
         0,
         2, 2
     )
