@@ -4,7 +4,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "test"
+local gamestate = "eggman"
 
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
@@ -100,7 +100,8 @@ local soundDefs = {
     torture_sound = "sounds/torture.mp3",
     laugh_sound = "sounds/laugh.mp3",
     S3K_9A = "sounds/S3K_9A.wav",
-    lights_off = "sounds/lights-sound-effect.mp3"
+    lights_off = "sounds/lights-sound-effect.mp3",
+    error_sound = "sounds/error_sound.mp3"
 }
 
 local sounds = {}
@@ -562,6 +563,10 @@ local sonic_demoexe_triggered = false
 local sonic_demoexe_animating = false
 local sonic_demoexe_wait_timer = 0
 
+local currentColor = {1, 1, 1}
+local targetColor = {1, 1, 1}
+local lerpSpeed = 5
+
 local function before_idk(dt)
     if tails.x < 10695 then
         sonic_demoexe.currentSprite = sonic_demoexe.anim_tails[1]
@@ -587,6 +592,23 @@ local function before_idk(dt)
         if sonic_demoexe_wait_timer <= 0 then
             gamestate = "torture"
         end
+    end
+
+    if tails.x >= 10000 then
+        targetColor = {0.1, 0.1, 0.1}
+        sounds.green_hill:stop()
+    elseif tails.x >= 8260 then
+        targetColor = {0.25, 0.25, 0.25}
+        sounds.green_hill:setPitch(0.5)
+    elseif tails.x >= 4800 then
+        targetColor = {0.5, 0.5, 0.5}
+        sounds.green_hill:setPitch(0.75)
+    else
+        targetColor = {1, 1, 1}
+        sounds.green_hill:setPitch(1)
+    end
+    for i = 1, 3 do
+        currentColor[i] = lerp(currentColor[i], targetColor[i], lerpSpeed * dt)
     end
 end
 
@@ -622,6 +644,13 @@ function getControls()
 
     return moveRight, moveLeft, jump, lookUp, lookDown, fallThroughInput
 end
+
+local crashing = false
+local crashTimer = 0
+local crashDuration = 4
+local crashAlpha = 0
+local crashMaxAlpha = 0.5
+local fadeDuration = 0.25
 
 local function test_update(dt, char, map)
     local mapWidth  = map.width  or 2000
@@ -769,8 +798,10 @@ local function test_update(dt, char, map)
         char.velocity.x = math.min(0, char.velocity.x)
     end
 
-    if char.y >= mapHeight + 40 then
-        love.event.quit()
+    if char ~= sonic_demoexe then
+        if char.y >= mapHeight + 40 then
+            love.event.quit()
+        end
     end
 
     updateGamestate(dt, char)
@@ -843,6 +874,57 @@ function knuck_up(dt)
         sonic_demoexe.x = 6453
         sonic_demoexe.y = 772
         sonic_demoexe.direction = -1
+    end
+end
+
+local error_sound_played = false
+function eggman_up(dt)
+    if eggman.x < 1472 then
+        if sonic_demoexe.grounded then
+            updateSprite(dt, sonic_demoexe.float, sonic_demoexe)
+        end
+
+        if math.abs(eggman.y - sonic_demoexe.y) > 50 then
+            sonic_demoexe.velocity.y = sonic_demoexe.jumpHeight
+            updateSprite(dt, sonic_demoexe.fly, sonic_demoexe)
+        end
+
+        local dx = eggman.x - sonic_demoexe.x
+        local dy = eggman.y - sonic_demoexe.y
+
+        if dx ~= 0 then
+            sonic_demoexe.x = sonic_demoexe.x + (dx / math.abs(dx)) * 682 * dt
+        end
+
+        local verticalSpeed = 305
+        local deadzone = 10
+
+        if math.abs(dy) > deadzone then
+            sonic_demoexe.y = sonic_demoexe.y + (dy / math.abs(dy)) * verticalSpeed * dt
+        end
+
+        if eggman.x > sonic_demoexe.x then
+            sonic_demoexe.direction = 1
+        else
+            sonic_demoexe.direction = -1
+        end
+
+        local triggerDistance = 125
+
+        local dx = math.abs(eggman.x - sonic_demoexe.x)
+        local dy = math.abs(eggman.y - sonic_demoexe.y)
+
+        if not crashing and dx < triggerDistance and dy < triggerDistance then
+            crashing = true
+            crashTimer = 0
+            if not error_sound_played then
+                sounds.error_sound:play()
+                error_sound_played = true
+            end
+        end
+    else
+        sonic_demoexe.x = 2894
+        sonic_demoexe.y = 1255
     end
 end
 
@@ -933,7 +1015,6 @@ function hide_and_seek(dt)
         end
 
         local dx = tails.x - sonic_demoexe.x
-        local dy = tails.y - sonic_demoexe.y
 
         if dx ~= 0 then
             sonic_demoexe.x = sonic_demoexe.x + (dx / math.abs(dx)) * 355 * dt
@@ -1116,11 +1197,6 @@ local shrinkDuration = 2.25
 elapsedTime4 = 0
 reboot_vis = false
 
-local currentColor = {1, 1, 1}
-local targetColor = {1, 1, 1}
-local lerpSpeed = 5
-
-local showHelloWilliam = false
 local helloWilliamTimer = 0
 
 function drawStageName(img, x, y)
@@ -1220,23 +1296,6 @@ function love.update(dt)
     if gamestate == "test" then
         test_update(dt, tails, map)
         before_idk(dt)
-
-        if tails.x >= 10000 then
-            targetColor = {0.1, 0.1, 0.1}
-            sounds.green_hill:stop()
-        elseif tails.x >= 8260 then
-            targetColor = {0.25, 0.25, 0.25}
-            sounds.green_hill:setPitch(0.5)
-        elseif tails.x >= 4800 then
-            targetColor = {0.5, 0.5, 0.5}
-            sounds.green_hill:setPitch(0.75)
-        else
-            targetColor = {1, 1, 1}
-            sounds.green_hill:setPitch(1)
-        end
-        for i = 1, 3 do
-            currentColor[i] = lerp(currentColor[i], targetColor[i], lerpSpeed * dt)
-        end
     elseif gamestate == "hs" then
         test_update(dt, tails, map1)
         hide_and_seek(dt)
@@ -1256,9 +1315,37 @@ function love.update(dt)
         test_update(dt, knuckles, map2)
         knuck_up(dt)
     elseif gamestate == "eggman" then
-        test_update(dt, eggman, map3)
+        if not crashing then
+            test_update(dt, eggman, map3)
+            eggman_up(dt)
+        else
+            sonic_demoexe.currentSprite = sonic_demoexe.fly[1]
+            eggman.currentSprite = eggman.idle
+        end
+
+        if crashing then
+            crashTimer = crashTimer + dt
+
+            if crashTimer <= fadeDuration then
+                crashAlpha = (crashTimer / fadeDuration) * crashMaxAlpha
+            else
+                crashAlpha = crashMaxAlpha
+            end
+
+            if crashTimer >= crashDuration then
+                gamestate = "cheating"
+                crashing = false
+                crashTimer = 0
+                crashAlpha = 0
+            end
+        end
+    elseif gamestate == "torture" then
+        torture(dt)
     elseif gamestate == "william" then
         william_update(dt)
+        love.mouse.setRelativeMode(true)
+    else
+        love.mouse.setRelativeMode(false)
     end
 
     if gamestate == "selection" then
@@ -1299,13 +1386,6 @@ function love.update(dt)
 
     menuscreen_update(dt)
     updateStageTitle(dt)
-
-    if gamestate == "william" then
-        love.mouse.setRelativeMode(true)
-    else
-        love.mouse.setRelativeMode(false)
-    end
-
     if animation_phase ~= "initial" then
         bgX1 = bgX1 + scroll_speed * dt
         bgX2 = bgX2 + scroll_speed * dt
@@ -1318,11 +1398,6 @@ function love.update(dt)
             bgX2 = bgX1 - menu:getWidth()
         end
     end
-
-    if gamestate == "torture" then
-        torture(dt)
-    end
-
     if gamestate == "error" then
         elapsedTime4 = (elapsedTime4 or 0) + dt
 
@@ -2061,6 +2136,7 @@ function love.draw()
         love.graphics.translate(-math.floor(camera.x), -math.floor(camera.y))
         love.graphics.draw(egg_mob, 3200, 903)
         love.graphics.draw(gh1, 0, 0)
+        char_draw(sonic_demoexe, 0, -2)
         char_draw(eggman, 0, -8)
         love.graphics.pop()
         drawStats()
@@ -2087,6 +2163,12 @@ function love.draw()
             local y = base_height / 2 - 40
 
             drawTitleCard(greenHillZoneTitle, hideAndSeekZoneCircles, stageActImg1, slideX, y)
+            love.graphics.setColor(1, 1, 1, 1)
+        end
+
+        if crashing then
+            love.graphics.setColor(1, 1, 1, crashAlpha)
+            love.graphics.rectangle("fill", 0, 0, base_width, base_height)
             love.graphics.setColor(1, 1, 1, 1)
         end
     end
