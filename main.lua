@@ -4,7 +4,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "menuscreen"
+local gamestate = "knuck"
 
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
@@ -214,14 +214,14 @@ stage2_vis = true
 stage3 = love.graphics.newImage(spritesFolder.."sonic_demo.exe/anim/knuckles/stage3.png")
 stage3_vis = true
 
-local tails = createCharacter{ x = 100, y = 50, maxSpeed = 400 }
+local tails = createCharacter{ x = 100, y = 50, maxSpeed = 200 }
 tails.idle = love.graphics.newImage(spritesFolder .. "tails/idle.png")
 tails.down = love.graphics.newImage(spritesFolder .. "tails/down/1.png")
 tails.walk = loadFrames(spritesFolder .. "tails/walking/", 8)
 tails.jump = loadFrames(spritesFolder .. "tails/jump/", 3)
 tails.run = loadFrames(spritesFolder .. "tails/run/", 2)
 
-local knuckles = createCharacter{ x = 100, y = 50, maxSpeed = 400 }
+local knuckles = createCharacter{ x = 100, y = 50, maxSpeed = 200 }
 knuckles.idle = love.graphics.newImage(spritesFolder .. "knuckles/idle.png")
 knuckles.walk = loadFrames(spritesFolder .. "knuckles/walking/", 7)
 knuckles.run = loadFrames(spritesFolder .. "knuckles/run/", 4)
@@ -236,6 +236,7 @@ eggman.jump = loadFrames(spritesFolder .. "eggman/walking/", 1)
 
 local sonic_demoexe = createCharacter{x = -100, y = -140 }
 sonic_demoexe.idle = love.graphics.newImage(spritesFolder .. "sonic_demo.exe/idle.png")
+sonic_demoexe.crouch = love.graphics.newImage(spritesFolder .. "sonic_demo.exe/crouch.png")
 sonic_demoexe.anim_tails = loadFrames(spritesFolder .. "sonic_demo.exe/anim/tails/", 8)
 sonic_demoexe.float = loadFrames(spritesFolder .. "sonic_demo.exe/float/", 2)
 sonic_demoexe.jump = loadFrames(spritesFolder .. "sonic_demo.exe/jump/", 5)
@@ -647,60 +648,59 @@ local function test_update(dt, char, map)
     if char.grounded and (lookUp or lookDown) then
         char.velocity.x = 0
         char.spriteIndex = 1
-        if lookUp then
-            char.currentSprite = char.up or char.idle
-        elseif lookDown then
-            char.currentSprite = char.down or char.idle
-        end
+        char.currentSprite = lookUp and (char.up or char.idle) or (char.down or char.idle)
         return
     end
 
-    if moveRight or moveLeft then
-        local direction = moveRight and 1 or -1
-        char.direction = direction
-        char.velocity.x = clamp(char.velocity.x + direction * char.acceleration * dt, -char.maxSpeed, char.maxSpeed)
+    if char ~= sonic_demoexe then
+        if moveRight or moveLeft then
+            local direction = moveRight and 1 or -1
+            char.direction = direction
+            char.velocity.x = clamp(char.velocity.x + direction * char.acceleration * dt, -char.maxSpeed, char.maxSpeed)
 
-        if char.jumping then
-            updateSprite(dt, char.jump, char)
-        elseif math.abs(char.velocity.x) >= char.runThreshold then
-            updateSprite(dt, char.run, char)
-        else
-            updateSprite(dt, char.walk, char)
-        end
-    else
-        char.velocity.x = char.velocity.x * 0.85
-        if math.abs(char.velocity.x) <= 2 then
-            char.velocity.x = 0
-            if not char.jumping then
-                char.spriteIndex = 1
-                char.currentSprite = char.idle
-            else
-                updateSprite(dt, char.jump, char)
-            end
-        else
             if char.jumping then
                 updateSprite(dt, char.jump, char)
+            elseif math.abs(char.velocity.x) >= char.runThreshold then
+                updateSprite(dt, char.run, char)
             else
                 updateSprite(dt, char.walk, char)
             end
+        else
+            char.velocity.x = char.velocity.x * 0.85
+            if math.abs(char.velocity.x) <= 2 then
+                char.velocity.x = 0
+                if not char.jumping then
+                    char.spriteIndex = 1
+                    char.currentSprite = char.idle
+                else
+                    updateSprite(dt, char.jump, char)
+                end
+            else
+                if char.jumping then
+                    updateSprite(dt, char.jump, char)
+                else
+                    updateSprite(dt, char.walk, char)
+                end
+            end
+        end
+
+        if jump and not char.jumping and not fallThroughInput then
+            char.velocity.y = char.jumpHeight
+            char.spriteIndex = 1
+            updateSprite(dt, char.jump, char)
+            char.jumping = true
+            char.grounded = false
+            sounds.jump_sound:play()
         end
     end
 
-    if jump and not char.jumping and not fallThroughInput then
-        char.velocity.y = char.jumpHeight
-        char.spriteIndex = 1
-        updateSprite(dt, char.jump, char)
-        char.jumping = true
-        char.grounded = false
-        sounds.jump_sound:play()
-    end
-    local nextX = char.x + char.velocity.x * dt
     local nextY = char.y + char.velocity.y * dt
-    local stepped = false
+    local nextX = char.x + char.velocity.x * dt
     if not checkCollision(char, map, nextX, char.y) then
         char.x = nextX
     else
-        for step = 0, MAX_STEP_HEIGHT do
+        local stepped = false
+        for step = 1, MAX_STEP_HEIGHT do
             if not checkCollision(char, map, nextX, char.y - step) then
                 char.x = nextX
                 char.y = char.y - step
@@ -708,19 +708,20 @@ local function test_update(dt, char, map)
                 break
             end
         end
-
         if not stepped then
             char.velocity.x = 0
         end
     end
+
     if fallThroughInput then
         if not checkCollision(char, map, char.x, nextY, true) then
             char.y = nextY
             char.grounded = false
         else
+            char.y = math.floor(char.y)
+            char.velocity.y = 0
             char.grounded = true
             char.jumping = false
-            char.velocity.y = 0
         end
     else
         if char.velocity.y < 0 then
@@ -739,14 +740,13 @@ local function test_update(dt, char, map)
                 for i = 0, MAX_STEP_HEIGHT do
                     if not checkCollision(char, map, char.x, nextY - i) then
                         char.y = nextY - i
+                        char.velocity.y = 0
                         char.grounded = true
                         char.jumping = false
-                        char.velocity.y = 0
                         foundGround = true
                         break
                     end
                 end
-
                 if not foundGround then
                     char.velocity.y = 0
                     char.grounded = true
@@ -767,14 +767,15 @@ local function test_update(dt, char, map)
         char.lastGroundedY = char.y
     end
 
-    if char.x <= 15 then
+    if char.x < 15 then
         char.x = 15
-        if char.velocity.x < 0 then
-            char.velocity.x = 0
-        end
+        char.velocity.x = math.max(0, char.velocity.x)
+    elseif char.x > mapWidth - 15 then
+        char.x = mapWidth - 15
+        char.velocity.x = math.min(0, char.velocity.x)
     end
 
-    if char.y >= 1080 then
+    if char.y >= mapHeight + 40 then
         love.event.quit()
     end
     updateGamestate(dt, char)
@@ -798,7 +799,12 @@ local bushes = {
 }
 tails_caught_timer = 0
 show_black_screen = false
+idk_fix = false
+waiting_knuck = 0
+demo_vis = false
 
+local demo_speed = 400
+local previousDirection = sonic_demoexe.direction
 function knuck_up(dt)
     updateSprite(dt, s1.stage2, s1)
 
@@ -814,6 +820,34 @@ function knuck_up(dt)
     if knuckles.x >= 5350 then
         stage3_vis = false
         knuck_bg = knuck_bg3
+    end
+
+    if knuckles.x > 5991 then
+        waiting_knuck = waiting_knuck + dt
+        idk_fix = true
+
+        if waiting_knuck >= 0.75 then
+            demo_vis = true
+        end
+
+        if waiting_knuck >= 2 then
+            if sonic_demoexe.x >= 5991 then
+                sonic_demoexe.direction = -1
+            elseif sonic_demoexe.x <= 6501 then
+                sonic_demoexe.direction = 1
+            end
+                
+            if sonic_demoexe.direction ~= previousDirection then
+                demo_speed = math.random(375, 400)
+                previousDirection = sonic_demoexe.direction
+            end
+        end
+        test_update(dt, sonic_demoexe, map2)
+    else
+        sonic_demoexe.currentSprite = sonic_demoexe.crouch
+        sonic_demoexe.x = 6453
+        sonic_demoexe.y = 772
+        sonic_demoexe.direction = -1
     end
 end
 
@@ -833,11 +867,12 @@ function hide_and_seek(dt)
         end
     end
 
+    local moveRight, moveLeft, jump, lookUp, lookDown, fallThroughInput = getControls()
     tails_hiding = false
     for _, bush in ipairs(bushes) do
         if tails.x > bush.x and tails.x < bush.x + bush_img:getWidth() and
            tails.y > bush.y and tails.y < bush.y + bush_img:getHeight() and
-           love.keyboard.isDown("down") then
+           lookDown then
             tails_hiding = true
             break
         end
@@ -877,7 +912,7 @@ function hide_and_seek(dt)
         return
     end
 
-    updateSprite(dt, fire_bg.idle, fire_bg)
+    updateSprite(dt * 0.5, fire_bg.idle, fire_bg)
 
     if tails_hiding then
         hs_timer = 12
@@ -906,11 +941,11 @@ function hide_and_seek(dt)
         local dy = tails.y - sonic_demoexe.y
 
         if dx ~= 0 then
-            sonic_demoexe.x = sonic_demoexe.x + (dx / math.abs(dx)) * 185 * dt
+            sonic_demoexe.x = sonic_demoexe.x + (dx / math.abs(dx)) * 355 * dt
         end
 
         if dy ~= 0 then
-            local verticalSpeed = 100
+            local verticalSpeed = 305
             sonic_demoexe.y = sonic_demoexe.y + (dy / math.abs(dy)) * verticalSpeed * dt
         end
 
@@ -1890,11 +1925,11 @@ function love.draw()
         local timerText = string.format("HIDING TIME LEFT: %.1f", hs_timer)
         local timerWidth = love.graphics.getFont():getWidth(timerText)
     
-        love.graphics.setColor(0, 0, 0)
-        love.graphics.print(timerText, (base_width - timerWidth) - 17, 30 + 3)
-    
-        love.graphics.setColor(1, 1, 0)
-        if bushes_destroyed then
+        if not bushes_destroyed then
+            love.graphics.setColor(0, 0, 0)
+            love.graphics.print(timerText, (base_width - timerWidth) - 17, 30 + 3)
+        
+            love.graphics.setColor(1, 1, 0)
             love.graphics.print(timerText, (base_width - timerWidth) - 20, 30)
         end
         love.graphics.setColor(1, 1, 1, 1)
@@ -1937,6 +1972,10 @@ function love.draw()
         love.graphics.translate(-math.floor(camera.x), -math.floor(camera.y))
         love.graphics.draw(knuck1)
         char_draw(knuckles, 0, -2)
+
+        if demo_vis then
+            char_draw(sonic_demoexe, 0, -2)
+        end
         if stage1_vis then
             love.graphics.draw(stage1, 2544, 518)
         end
@@ -1975,6 +2014,16 @@ function love.draw()
             flashScreen(0.45)
             soundPlayed9 = true
             end
+        end
+
+        if idk_fix then
+            --if knuckles.x < 5927 then
+                --knuckles.x = knuckles.x + 15
+                if knuckles.x < 5991 then
+                    knuckles.x = 5991
+                    knuckles.velocity.x = math.max(0, knuckles.velocity.x)
+                end
+            --end
         end
         love.graphics.pop()
         drawStats()
