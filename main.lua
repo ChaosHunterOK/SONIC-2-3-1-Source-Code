@@ -10,8 +10,8 @@ local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
 
 local isMobile = false
-local os = love.system.getOS()
-if os == "Android" or os == "iOS" then
+local os_device = love.system.getOS()
+if os_device == "Android" or os_device == "iOS" then
     isMobile = true
 end
 
@@ -2296,6 +2296,13 @@ function love.touchpressed(id, x, y)
     local dyB = y - jumpButton.y
     if dxB*dxB + dyB*dyB <= (jumpButton.radius*2)^2 then
         jumpButton.active = true
+    end
+
+    if splash_done and finished_transformation then
+        shrinkingMenu = true
+        if sounds.laugh_sound then
+            sounds.laugh_sound:play()
+        end
     end
 end
 
