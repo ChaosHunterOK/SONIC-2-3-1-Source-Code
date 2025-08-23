@@ -1800,8 +1800,8 @@ function mobile_stuff_draw()
 
     love.graphics.draw(
         joystickBaseImage,
-        joystick.x - joystickBaseImage:getWidth() / 2,
-        joystick.y - joystickBaseImage:getHeight() / 2,
+        joystick.x - joystickBaseImage:getWidth() / 2 * SCALE,
+        joystick.y - joystickBaseImage:getHeight() / 2 * SCALE,
         0,
         SCALE, SCALE
     )
@@ -1818,8 +1818,8 @@ function mobile_stuff_draw()
 
     love.graphics.draw(
         jumpButtonImage,
-        jumpButton.x - jumpButtonImage:getWidth() / 2,
-        jumpButton.y - jumpButtonImage:getHeight() / 2,
+        jumpButton.x - jumpButtonImage:getWidth() / 2 * SCALE,
+        jumpButton.y - jumpButtonImage:getHeight() / 2 * SCALE,
         0,
         SCALE, SCALE
     )
