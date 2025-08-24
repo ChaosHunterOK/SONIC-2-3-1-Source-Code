@@ -679,14 +679,13 @@ local function test_update(dt, char, map)
 
     local moveRight, moveLeft, jump, lookUp, lookDown, fallThroughInput = getControls()
 
-    if char.grounded and (lookUp or lookDown) then
-        char.velocity.x   = 0
-        char.spriteIndex  = 1
-        char.currentSprite = lookUp and (char.up or char.idle) or (char.down or char.idle)
-        return
-    end
-
     if char ~= sonic_demoexe then
+        if char.grounded and (lookUp or lookDown) then
+            char.velocity.x   = 0
+            char.spriteIndex  = 1
+            char.currentSprite = lookUp and (char.up or char.idle) or (char.down or char.idle)
+            return
+        end
         if moveRight or moveLeft then
             local direction = moveRight and 1 or -1
             char.direction  = direction
