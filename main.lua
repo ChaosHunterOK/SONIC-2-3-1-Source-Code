@@ -4,7 +4,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "knuck"
+local gamestate = "test"
 
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
@@ -657,6 +657,47 @@ local crashAlpha = 0
 local crashMaxAlpha = 0.5
 local fadeDuration = 0.25
 
+local function getGroundAngle(char, map)
+    local sampleDist = 6
+    local yLeft, yRight = char.y, char.y
+
+    for i = 0, MAX_STEP_HEIGHT + 5 do
+        if not checkCollision(char, map, char.x - sampleDist, char.y - i) then
+            yLeft = char.y - i
+            break
+        end
+    end
+
+    for i = 0, MAX_STEP_HEIGHT + 5 do
+        if not checkCollision(char, map, char.x + sampleDist, char.y - i) then
+            yRight = char.y - i
+            break
+        end
+    end
+
+    local dy = yRight - yLeft
+    local dx = sampleDist * 2
+
+    if math.abs(dy) <= 6 then
+        dy = 0
+    end
+
+    local angle = math.atan2(dy, dx)
+    return angle, dy
+end
+
+local function quantizeAngle(angle)
+    local deg = math.deg(angle)
+    if deg > 22.5 then
+        deg = 45
+    elseif deg < -22.5 then
+        deg = -45
+    else
+        deg = 0
+    end
+    return math.rad(deg)
+end
+
 local function test_update(dt, char, map)
     local mapWidth  = map.width  or 2000
     local mapHeight = map.height or 1080
@@ -681,9 +722,10 @@ local function test_update(dt, char, map)
 
     if char ~= sonic_demoexe then
         if char.grounded and (lookUp or lookDown) then
-            char.velocity.x   = 0
-            char.spriteIndex  = 1
+            char.velocity.x = 0
+            char.spriteIndex = 1
             char.currentSprite = lookUp and (char.up or char.idle) or (char.down or char.idle)
+            char.angle = 0
             return
         end
         if moveRight or moveLeft then
@@ -694,6 +736,7 @@ local function test_update(dt, char, map)
 
             if char.jumping then
                 updateSprite(dt, char.jump, char)
+                char.angle = 0
             elseif math.abs(char.velocity.x) >= char.runThreshold then
                 updateSprite(dt, char.run, char)
             else
@@ -706,6 +749,7 @@ local function test_update(dt, char, map)
                 if not char.jumping then
                     char.spriteIndex  = 1
                     char.currentSprite = char.idle
+                    char.angle = 0
                 else
                     updateSprite(dt, char.jump, char)
                 end
@@ -714,13 +758,47 @@ local function test_update(dt, char, map)
             end
         end
 
-        if jump and not char.jumping and not fallThroughInput then
+        if jump and char.grounded and not fallThroughInput then
             char.velocity.y  = char.jumpHeight
             char.spriteIndex = 1
             updateSprite(dt, char.jump, char)
             char.jumping  = true
             char.grounded = false
             sounds.jump_sound:play()
+        end
+    end
+
+    char.inputLeft  = moveLeft
+    char.inputRight = moveRight
+
+    if char.grounded then
+        local rawAngle, dy = getGroundAngle(char, map)
+        local angle = quantizeAngle(rawAngle)
+
+        if math.abs(char.velocity.x) >= char.runThreshold then
+            if math.abs(math.deg(angle)) >= 80 then
+                char.grounded = true
+                char.velocity.y = 0
+                char.angle = angle
+
+                char.y = char.y - char.velocity.x * dt * (char.direction or 1)
+                if not checkCollision(char, map, char.x, char.y - 1) then
+                    char.velocity.y = char.jumpHeight
+                    char.jumping = true
+                    char.grounded = false
+                    sounds.jump_sound:play()
+                end
+            else
+                char.angle = angle
+                if dy ~= 0 then
+                    char.y = char.y + dy * 0.5
+                end
+            end
+        else
+            char.angle = angle
+            if dy ~= 0 then
+                char.y = char.y + dy * 0.5
+            end
         end
     end
 
@@ -749,8 +827,8 @@ local function test_update(dt, char, map)
         else
             char.y = math.floor(char.y)
             char.velocity.y = 0
-            char.grounded   = true
-            char.jumping    = false
+            char.grounded = true
+            char.jumping = false
         end
     elseif char.velocity.y < 0 then
         if not checkCollision(char, map, char.x, nextY, true) then
@@ -769,16 +847,16 @@ local function test_update(dt, char, map)
                 if not checkCollision(char, map, char.x, nextY - i) then
                     char.y = nextY - i
                     char.velocity.y = 0
-                    char.grounded   = true
-                    char.jumping    = false
+                    char.grounded = true
+                    char.jumping = false
                     foundGround = true
                     break
                 end
             end
             if not foundGround then
                 char.velocity.y = 0
-                char.grounded   = true
-                char.jumping    = false
+                char.grounded = true
+                char.jumping = false
             end
         end
     end
@@ -898,6 +976,7 @@ function knuck_up(dt)
                 if math.random() <= 0.4 then
                     sonic_demoexe.velocity.y = sonic_demoexe.jumpHeight
                     sonic_demoexe.jumping = true
+                    sonic_demoexe.grounded = false
                 end
             end
 
@@ -1247,6 +1326,7 @@ local shrinkTimer = 0
 local shrinkDuration = 2.25
 elapsedTime4 = 0
 reboot_vis = false
+reboot_vis2 = false
 
 local helloWilliamTimer = 0
 
@@ -1396,6 +1476,8 @@ function love.update(dt)
     elseif gamestate == "william" then
         william_update(dt)
         love.mouse.setRelativeMode(true)
+    elseif gamestate == "warning" and love.keyboard.isDown("return") then
+        startTransition("error")
     else
         love.mouse.setRelativeMode(false)
     end
@@ -1453,8 +1535,10 @@ function love.update(dt)
     if gamestate == "error" then
         elapsedTime4 = (elapsedTime4 or 0) + dt
 
-        if elapsedTime4 >= 5 then
+        if elapsedTime4 >= 7 then
             reboot_vis = true
+        elseif elapsedTime4 >= 2 then
+            reboot_vis2 = true
         end
 
         if reboot_vis and not rebootDone then
@@ -1982,7 +2066,7 @@ function love.draw()
         love.graphics.draw(test2, 0, 0)
 
         if sonic_demoexe.currentSprite then
-            love.graphics.draw(sonic_demoexe.currentSprite, 10928, 730)
+            love.graphics.draw(sonic_demoexe.currentSprite, 10948, 730)
         end
 
         tails_tail_thing()
@@ -2127,7 +2211,7 @@ function love.draw()
                 local text = "HELLO WILLIAM."
                 love.graphics.print(text, base_width/2 - FontBig:getWidth(text)/2, base_height/2 - FontBig:getHeight()/2)
             end
-        else
+        elseif reboot_vis2 then
             love.graphics.setFont(FontBig)
             love.graphics.print("An Error has Occurred.", 20, 20)
         end
@@ -2139,6 +2223,9 @@ function love.draw()
     elseif gamestate == "doc" then
         love.graphics.setColor(1,1,1,message_alpha)
         love.graphics.printf("Press Enter to open the Document", 0, base_height/2, base_width, "center")
+    elseif gamestate == "warning" then
+        love.graphics.printf("WARNING!\nThis game contains flash light and it might also be buggy as well, which will be fixed in the very next updates of the game.\n\nPress start to play.", 0, base_height/2 - 45, base_width, "center")
+    elseif gamestate == "cheating" then
     end
 
     if transitionAlpha > 0 then
