@@ -4,7 +4,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "eggman"
+local gamestate = "william"
 
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
@@ -305,19 +305,18 @@ local colorTR = {0xA2/255, 0xA0/255, 0x20/255, 1}
 local targetYaw, targetPitch = 0, 0
 
 local function createBaseplate(w, d)
-    local tiles = {}
-    local tileSize = 1
-    local idx = 0
-
+    local tiles, idx = {}, 0
     for z = 0, d - 1 do
+        local zPos = z
         for x = 0, w - 1 do
             local col = ((x + z) % 2 == 0) and colorTL or colorTR
             idx = idx + 1
+            local xPos = x
             tiles[idx] = {
-                {x * tileSize, 0, z * tileSize, col},
-                {x * tileSize + tileSize, 0, z * tileSize, col},
-                {x * tileSize + tileSize, 0, z * tileSize + tileSize, col},
-                {x * tileSize, 0, z * tileSize + tileSize, col}
+                {xPos, 0, zPos,col},
+                {xPos + 1, 0, zPos, col},
+                {xPos + 1, 0, zPos + 1, col},
+                {xPos, 0, zPos + 1, col}
             }
         end
     end
@@ -445,22 +444,21 @@ function william_update(dt)
     camera_3d.roll = camera_3d.roll + (targetRoll - camera_3d.roll) * math.min(dt * rollReturnSpeed, 1)
     targetRoll = targetRoll + (0 - targetRoll) * math.min(dt * rollReturnSpeed, 1)
     local inputX, inputZ = 0, 0
-    if love.keyboard.isDown("w") then inputZ = inputZ + 1 end
-    if love.keyboard.isDown("s") then inputZ = inputZ - 1 end
-    if love.keyboard.isDown("a") then inputX = inputX - 1 end
-    if love.keyboard.isDown("d") then inputX = inputX + 1 end
-
-    local len = math.sqrt(inputX*inputX + inputZ*inputZ)
+    if love.keyboard.isDown("w") or joystick.dy < -0.2 then inputZ = inputZ + 1 end
+    if love.keyboard.isDown("s") or joystick.dy > 0.2 then inputZ = inputZ - 1 end
+    if love.keyboard.isDown("a") or joystick.dx > 0.2 then inputX = inputX - 1 end
+    if love.keyboard.isDown("d") or joystick.dx < -0.2 then inputX = inputX + 1 end
+    local len = inputX*inputX + inputZ*inputZ
     if len > 0 then
-        inputX, inputZ = inputX/len, inputZ/len
+        len = 1 / math.sqrt(len)
+        inputX, inputZ = inputX * len, inputZ * len
     end
 
-    local accel = 12
-    velX = velX + (inputX * moveSpeed - velX) * math.min(dt * accel, 1)
-    velZ = velZ + (inputZ * moveSpeed - velZ) * math.min(dt * accel, 1)
+    local accel = math.min(dt * 12, 1)
+    velX = velX + (inputX * moveSpeed - velX) * accel
+    velZ = velZ + (inputZ * moveSpeed - velZ) * accel
 
-    local walking = math.abs(velX) > 0.01 or math.abs(velZ) > 0.01
-    if walking then
+    if math.abs(velX) > 0.01 or math.abs(velZ) > 0.01 then
         walkTime = walkTime + dt * 10
         bobAmount = bobAmount + ((math.sin(walkTime) * 0.1) - bobAmount) * dt * 8
     else
@@ -471,19 +469,25 @@ function william_update(dt)
     local sy, cy = math.sin(camera_3d.yaw), math.cos(camera_3d.yaw)
     camera_3d.x = camera_3d.x + (velX * cy - velZ * sy) * dt
     camera_3d.z = camera_3d.z + (velX * sy + velZ * cy) * dt
+
     local dx, dy, dz = camera_3d.x - chaser.x, camera_3d.y - chaser.y, camera_3d.z - chaser.z
-    local dist = math.sqrt(dx*dx + dy*dy + dz*dz)
-    if dist > 0.1 then
+    local distSq = dx*dx + dy*dy + dz*dz
+    if distSq > 0.01 then
+        local dist = math.sqrt(distSq)
         local speedFactor = 1 + math.max(0, (20 - dist) / 20) * 2
-        chaser.vx = (chaser.vx or 0) + ((dx / dist) * chaser.speed * speedFactor - (chaser.vx or 0)) * dt * 4
-        chaser.vy = (chaser.vy or 0) + ((dy / dist) * chaser.speed * speedFactor - (chaser.vy or 0)) * dt * 4
-        chaser.vz = (chaser.vz or 0) + ((dz / dist) * chaser.speed * speedFactor - (chaser.vz or 0)) * dt * 4
+        local lerpAmt = dt * 4
+        local targetVx = dx / dist * chaser.speed * speedFactor
+        local targetVy = dy / dist * chaser.speed * speedFactor
+        local targetVz = dz / dist * chaser.speed * speedFactor
+        chaser.vx = (chaser.vx or 0) + (targetVx - (chaser.vx or 0)) * lerpAmt
+        chaser.vy = (chaser.vy or 0) + (targetVy - (chaser.vy or 0)) * lerpAmt
+        chaser.vz = (chaser.vz or 0) + (targetVz - (chaser.vz or 0)) * lerpAmt
 
         chaser.x = chaser.x + chaser.vx * dt
         chaser.y = chaser.y + chaser.vy * dt
         chaser.z = chaser.z + chaser.vz * dt
     end
-    if dist2(camera_3d, chaser) < 1 then
+    if distSq < 1 then
         gamestate = "game_over"
     end
 end
@@ -1755,32 +1759,6 @@ function draw_william()
     love.graphics.setColor(1,1,1,1)
     love.graphics.draw(idk_img, 0, 0, 0, w/idk_img:getWidth(), h/idk_img:getHeight())
     drawStats()
-
-    if showStageTitle then
-        local alpha = 1
-        if stageTitleTimer > stageTitleDuration - stageTitleFadeTime then
-            alpha = (stageTitleDuration - stageTitleTimer) / stageTitleFadeTime
-        end
-        alpha = clamp(alpha, 0, 1)
-
-        love.graphics.setColor(0, 0, 0, alpha)
-        love.graphics.rectangle("fill", 0, 0, base_width, base_height)
-        love.graphics.setColor(1, 1, 1, 1)
-        local enterProgress = math.min(stageTitleTimer / stageTitleFadeTime, 1)
-        local startX = -100
-        local endX = base_width / 2 - (greenHillZoneTitle:getWidth() / 2) - 60
-        local slideX = lerp(startX, endX, linearTime(enterProgress))
-
-        if stageTitleTimer > stageTitleDuration - stageTitleFadeTime then
-            local exitProgress = 1 - ((stageTitleDuration - stageTitleTimer) / stageTitleFadeTime)
-            slideX = lerp(endX, base_width + 130, linearTime(exitProgress))
-        end
-
-        local y = base_height / 2 - 40
-
-        drawTitleCard(DotTitle, DotCircles, stageActImg1, slideX, y)
-        love.graphics.setColor(1, 1, 1, 1)
-    end
 end
 
 function draw_menuscreen()
@@ -2100,6 +2078,7 @@ function love.draw()
         love.graphics.setColor(1, 1, 1)
     elseif gamestate == "william" then
         draw_william()
+        drawStageTitle(DotTitle, DotCircles, stageActImg1)
         love.graphics.setColor(1, 1, 1)
     elseif gamestate == "error" then
         love.graphics.clear(0,0,0,1)
@@ -2267,6 +2246,13 @@ function love.touchpressed(id, x, y)
 
     if x > base_width / 2 then
         jumpButton.active = true
+    end
+
+    if splash_done and finished_transformation then
+        shrinkingMenu = true
+        if sounds.laugh_sound then
+            sounds.laugh_sound:play()
+        end
     end
 end
 
