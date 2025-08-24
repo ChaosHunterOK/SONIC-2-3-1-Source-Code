@@ -19,7 +19,7 @@ gravity = 600
 
 local base_width, base_height = 500, 250
 local thing = 650
-local camera = {x = 0, y = 0}
+local camera = {x = 0, y = 0, targetX = 0, targetY = 0}
 local camera_3d = {x = thing / 2, y = 5, z = thing / 2, yaw = 0, pitch = 0, roll = 0}
 local chaser = {x = -200, y = 0, z = -200, speed = 23}
 
@@ -170,7 +170,8 @@ local function createCharacter(opts)
         spriteIndex = 1,
         currentSprite = nil,
         startedChase = false,
-        randomJumpTimer = 0,
+        targetX = 0,
+        targetY = 0,
     }
 end
 
@@ -513,23 +514,12 @@ local function easeOutCubic(t)
 end
 
 local function isSolidPixel(x, y, map)
-    local tx = math.floor(x)
-    local ty = math.floor(y)
-
-    if tx < 0 or ty < 0 or tx >= map.width or ty >= map.height then
-        return false
-    end
-
-    if map.collision[ty] and map.collision[ty][tx] then
-        return true
-    end
-
-    return false
+    local tx, ty = math.floor(x), math.floor(y)
+    if tx < 0 or ty < 0 or tx >= map.width or ty >= map.height then return false end
+    return map.collision[ty] and map.collision[ty][tx] or false
 end
 
-local function isPassThroughTile(x, y)
-    return false
-end
+local function isPassThroughTile(x, y) return false end
 
 local MAX_STEP_HEIGHT = 10
 
@@ -542,12 +532,9 @@ local function checkCollision(char, map, x, y, ignoreBelow)
     for ty = top, bottom do
         for tx = left, right do
             if isSolidPixel(tx, ty, map) then
-                if ignoreBelow and ty >= bottom then
-                    if isPassThroughTile(tx, ty) then
-                    else
-                        return true
-                    end
-                else
+                if ignoreBelow and ty >= bottom and not isPassThroughTile(tx, ty) then
+                    return true
+                elseif not ignoreBelow then
                     return true
                 end
             end
@@ -635,7 +622,7 @@ function torture(dt)
     end
 
     if tort_time >= 7 then
-        startTransition("hs")
+        gamestate = "hs"
     end
 end
 
@@ -659,67 +646,38 @@ local fadeDuration = 0.25
 
 local function getGroundAngle(char, map)
     local sampleDist = 6
-    local yLeft, yRight = char.y, char.y
-
-    for i = 0, MAX_STEP_HEIGHT + 5 do
-        if not checkCollision(char, map, char.x - sampleDist, char.y - i) then
-            yLeft = char.y - i
-            break
+    local function sampleY(offset)
+        for i = 0, MAX_STEP_HEIGHT + 5 do
+            if not checkCollision(char, map, char.x + offset, char.y - i) then
+                return char.y - i
+            end
         end
+        return char.y
     end
 
-    for i = 0, MAX_STEP_HEIGHT + 5 do
-        if not checkCollision(char, map, char.x + sampleDist, char.y - i) then
-            yRight = char.y - i
-            break
-        end
-    end
-
-    local dy = yRight - yLeft
-    local dx = sampleDist * 2
-
-    if math.abs(dy) <= 6 then
-        dy = 0
-    end
-
-    local angle = math.atan2(dy, dx)
-    return angle, dy
+    local yLeft = sampleY(-sampleDist)
+    local yRight = sampleY(sampleDist)
+    local dy = math.abs(yRight - yLeft) <= 6 and 0 or (yRight - yLeft)
+    return math.atan2(dy, sampleDist * 2), dy
 end
 
 local function quantizeAngle(angle)
     local deg = math.deg(angle)
-    if deg > 22.5 then
-        deg = 45
-    elseif deg < -22.5 then
-        deg = -45
-    else
-        deg = 0
-    end
+    if deg > 22.5 then deg = 45
+    elseif deg < -22.5 then deg = -45
+    else deg = 0 end
     return math.rad(deg)
 end
 
 local function test_update(dt, char, map)
-    local mapWidth  = map.width  or 2000
-    local mapHeight = map.height or 1080
-    local smoothFactor = 0.085
-    
-    if char ~= sonic_demoexe then
-        local targetX = clamp(char.x - base_width / 2, 0, mapWidth - base_width)
-        local targetY = clamp(char.y - base_height / 2 - 30, 0, mapHeight - base_height)
-        camera.x = lerp(camera.x, targetX, smoothFactor)
-        camera.y = lerp(camera.y, targetY, smoothFactor)
-    end
-
+    local mapWidth, mapHeight = map.width or 2000, map.height or 1080
     if not char.grounded then
         char.velocity.y = char.velocity.y + gravity * dt
     end
 
-    if tail_tails.idle then
-        updateSprite(dt * 0.5, tail_tails.idle, tail_tails)
-    end
+    if tail_tails.idle then updateSprite(dt * 0.5, tail_tails.idle, tail_tails) end
 
     local moveRight, moveLeft, jump, lookUp, lookDown, fallThroughInput = getControls()
-    char.inputLeft, char.inputRight = moveLeft, moveRight
 
     if char ~= sonic_demoexe then
         if char.grounded and (lookUp or lookDown) then
@@ -759,7 +717,7 @@ local function test_update(dt, char, map)
             end
         end
 
-        if jump and char.grounded and not fallThroughInput then
+        if jump and not char.jumping and not fallThroughInput then
             char.velocity.y = char.jumpHeight
             char.spriteIndex = 1
             updateSprite(dt, char.jump, char)
@@ -771,10 +729,9 @@ local function test_update(dt, char, map)
 
     if char.grounded then
         local rawAngle, dy = getGroundAngle(char, map)
-        local angle = quantizeAngle(rawAngle)
-        char.angle = angle
+        char.angle = quantizeAngle(rawAngle)
 
-        if math.abs(char.velocity.x) >= char.runThreshold and math.abs(math.deg(angle)) >= 80 then
+        if math.abs(char.velocity.x) >= char.runThreshold and math.abs(math.deg(char.angle)) >= 80 then
             char.velocity.y = 0
             char.y = char.y - char.velocity.x * dt * (char.direction or 1)
             if not checkCollision(char, map, char.x, char.y - 1) then
@@ -788,8 +745,7 @@ local function test_update(dt, char, map)
         end
     end
 
-    local nextX = char.x + char.velocity.x * dt
-    local nextY = char.y + char.velocity.y * dt
+    local nextX, nextY = char.x + char.velocity.x * dt, char.y + char.velocity.y * dt
 
     if not checkCollision(char, map, nextX, char.y) then
         char.x = nextX
@@ -797,17 +753,17 @@ local function test_update(dt, char, map)
         local stepped = false
         for step = 1, MAX_STEP_HEIGHT do
             if not checkCollision(char, map, nextX, char.y - step) then
-                char.x = nextX
-                char.y = char.y - step
+                char.x, char.y = nextX, char.y - step
                 stepped = true
                 break
             end
         end
         if not stepped then char.velocity.x = 0 end
     end
-    local function applyVertical(nextY, fallThrough)
-        if not checkCollision(char, map, char.x, nextY, fallThrough) then
-            char.y = nextY
+
+    local function applyVertical(yTarget, fallThrough)
+        if not checkCollision(char, map, char.x, yTarget, fallThrough) then
+            char.y = yTarget
             char.grounded = false
         else
             if char.velocity.y < 0 then
@@ -816,18 +772,18 @@ local function test_update(dt, char, map)
                 char.grounded = false
                 char.y = char.y + 1
             else
-                local foundGround = false
+                local found = false
                 for i = 0, MAX_STEP_HEIGHT do
-                    if not checkCollision(char, map, char.x, nextY - i, fallThrough) then
-                        char.y = nextY - i
+                    if not checkCollision(char, map, char.x, yTarget - i, fallThrough) then
+                        char.y = yTarget - i
                         char.velocity.y = 0
                         char.grounded = true
                         char.jumping = false
-                        foundGround = true
+                        found = true
                         break
                     end
                 end
-                if not foundGround then
+                if not found then
                     char.velocity.y = 0
                     char.grounded = true
                     char.jumping = false
@@ -836,11 +792,8 @@ local function test_update(dt, char, map)
         end
     end
 
-    if fallThroughInput then
-        applyVertical(nextY, true)
-    else
-        applyVertical(nextY, false)
-    end
+    applyVertical(nextY, false)
+
     if char.grounded then
         local yDiff = math.abs(char.y - (char.lastGroundedY or char.y))
         if yDiff <= 1 then
@@ -851,16 +804,18 @@ local function test_update(dt, char, map)
     else
         char.lastGroundedY = char.y
     end
-    if char.x < 15 then
-        char.x = 15
-        char.velocity.x = math.max(0, char.velocity.x)
-    elseif char.x > mapWidth - 15 then
-        char.x = mapWidth - 15
-        char.velocity.x = math.min(0, char.velocity.x)
-    end
 
-    if char ~= sonic_demoexe and char.y >= mapHeight + 40 then
-        love.event.quit()
+    if char.x < 15 then char.x = 15; char.velocity.x = math.max(0, char.velocity.x)
+    elseif char.x > mapWidth - 15 then char.x = mapWidth - 15; char.velocity.x = math.min(0, char.velocity.x) end
+    if char ~= sonic_demoexe and char.y >= mapHeight + 40 then love.event.quit() end
+
+    if char ~= sonic_demoexe then
+        camera.targetX = clamp(char.x - base_width / 2, 0, mapWidth - base_width)
+        --if char.grounded or char.jumping then
+        camera.targetY = clamp(char.y - base_height / 2 - 30, 0, mapHeight - base_height)
+        --end
+        camera.x = math.floor(camera.targetX + 0.5)
+        camera.y = math.floor(camera.targetY + 0.5)
     end
 
     updateGamestate(dt, char)
