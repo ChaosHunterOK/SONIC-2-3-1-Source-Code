@@ -3,3 +3,6 @@ Credits:
 - Replayer: Game Tester, Document
 - Leon: Document
 - Saunter: Coder, Composer
+
+- SEGA: Sonic, Tails, Knuckles, Eggman and mostly the rest
+- RealDev: the Sonic 1 Title Screen Font (Expanded)
