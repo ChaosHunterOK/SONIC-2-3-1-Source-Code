@@ -4,7 +4,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "william"
+local gamestate = "knuck"
 
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
@@ -223,7 +223,7 @@ tails.walk = loadFrames(spritesFolder .. "tails/walking/", 8)
 tails.jump = loadFrames(spritesFolder .. "tails/jump/", 3)
 tails.run = loadFrames(spritesFolder .. "tails/run/", 2)
 
-local knuckles = createCharacter{ x = 100, y = 50, maxSpeed = 200 }
+local knuckles = createCharacter{ x = 100, y = 50, maxSpeed = 400 }
 knuckles.idle = love.graphics.newImage(spritesFolder .. "knuckles/idle.png")
 knuckles.walk = loadFrames(spritesFolder .. "knuckles/walking/", 7)
 knuckles.run = loadFrames(spritesFolder .. "knuckles/run/", 4)
@@ -831,7 +831,7 @@ local bushes = {
 tails_caught_timer = 0
 show_black_screen = false
 idk_fix = false
-waiting_knuck = 0
+local waiting_knuck = 0
 demo_vis = false
 
 local demo_speed = 400
@@ -839,61 +839,92 @@ local previousDirection = sonic_demoexe.direction
 
 local jumpTimer = 0
 local jumpInterval = 1
-function knuck_up(dt)
-    updateSprite(dt, s1.stage2, s1)
 
-    if knuckles.x >= 2400 then
-        stage1_vis = false
+function knuck_up(dt)
+    updateSprite(dt * 0.5, s1.stage2, s1)
+
+    if not demo_vis then
+        sonic_demoexe.currentSprite = sonic_demoexe.crouch
+        sonic_demoexe.x = 6453
+        sonic_demoexe.y = 772
+        sonic_demoexe.direction = -1
     end
 
+    if knuckles.x >= 2400 then stage1_vis = false end
     if knuckles.x >= 4250 then
         stage2_vis = false
         knuck_bg = knuck_bg2
+        demo_vis = true
     end
-
     if knuckles.x >= 5350 then
         stage3_vis = false
         knuck_bg = knuck_bg3
     end
 
-    if knuckles.x > 5991 then
-        waiting_knuck = waiting_knuck + dt
+    if knuckles.x > 5990 then
         idk_fix = true
+    end
 
-        if waiting_knuck >= 0.75 then
-            demo_vis = true
-        end
+    if knuckles.x > 5990 then
+        waiting_knuck = waiting_knuck + dt
 
-        if waiting_knuck >= 2 then
-            if sonic_demoexe.x >= 5991 then
+        if waiting_knuck >= 3 then
+            if sonic_demoexe.x > 6484 then
                 sonic_demoexe.direction = -1
-            elseif sonic_demoexe.x <= 6501 then
+            elseif sonic_demoexe.x < 5993 then
                 sonic_demoexe.direction = 1
             end
-                
+
+            if math.random() < 0.002 then
+                if knuckles.x > sonic_demoexe.x then
+                    sonic_demoexe.direction = 1
+                else
+                    sonic_demoexe.direction = -1
+                end
+            end
+
             if sonic_demoexe.direction ~= previousDirection then
                 demo_speed = math.random(375, 400)
                 previousDirection = sonic_demoexe.direction
             end
-        end
 
-        sonic_demoexe.velocity.x = demo_speed * sonic_demoexe.direction
+            if not demo_speed then demo_speed = 380 end
 
-        jumpTimer = jumpTimer + dt
-        if jumpTimer >= jumpInterval then
-            jumpTimer = 0
-            local chance = math.random()
-            if chance <= 0.4 and not sonic_demoexe.jumping then
-                sonic_demoexe.velocity.y = sonic_demoexe.jumpHeight
-                sonic_demoexe.jumping = true
+            local accel = 800
+            local targetSpeed = demo_speed * sonic_demoexe.direction
+
+            jumpTimer = jumpTimer + dt
+            if jumpTimer >= jumpInterval and not sonic_demoexe.jumping then
+                jumpTimer = 0
+                if math.random() <= 0.4 then
+                    sonic_demoexe.velocity.y = sonic_demoexe.jumpHeight
+                    sonic_demoexe.jumping = true
+                end
+            end
+
+            if sonic_demoexe.velocity.x < targetSpeed then
+                sonic_demoexe.velocity.x = math.min(sonic_demoexe.velocity.x + accel * dt, targetSpeed)
+            elseif sonic_demoexe.velocity.x > targetSpeed then
+                sonic_demoexe.velocity.x = math.max(sonic_demoexe.velocity.x - accel * dt, targetSpeed)
+            end
+
+            if sonic_demoexe.jumping then
+                updateSprite(dt, sonic_demoexe.jump, sonic_demoexe)
+            elseif math.abs(sonic_demoexe.velocity.x) < math.abs(targetSpeed) * 0.9 then
+                updateSprite(dt, sonic_demoexe.walk, sonic_demoexe)
+            else
+                updateSprite(dt, sonic_demoexe.run, sonic_demoexe)
+            end
+            if sonic_demoexe.grounded then
+                sonic_demoexe.jumping = false
+            end
+
+            if sonic_demoexe.x < 5991 then
+                sonic_demoexe.x = 5991
+                sonic_demoexe.velocity.x = math.max(0, sonic_demoexe.velocity.x)
             end
         end
         test_update(dt, sonic_demoexe, map2)
-    else
-        sonic_demoexe.currentSprite = sonic_demoexe.crouch
-        sonic_demoexe.x = 6453
-        sonic_demoexe.y = 772
-        sonic_demoexe.direction = -1
     end
 end
 
