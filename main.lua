@@ -1,4 +1,5 @@
 local love = require("love")
+local fast = require("fast")
 love.graphics.setDefaultFilter("nearest", "nearest")
 
 local spritesFolder = "images/sprites/"
@@ -15,7 +16,7 @@ if os_device == "Android" or os_device == "iOS" then
     isMobile = true
 end
 
-gravity = 600
+gravity = 625
 
 local base_width, base_height = 500, 250
 local thing = 650
@@ -48,36 +49,36 @@ local tails_lock = true
 local knuckles_lock = false
 local eggman_lock = false
 
-local idk_img = love.graphics.newImage("images/idk.png")
-local chase_img = love.graphics.newImage("images/chase.png")
-local bush_img = love.graphics.newImage("images/bush.png")
-local egg_mob = love.graphics.newImage("images/egg_mob.png")
+local idk_img = fast.getImage("images/idk.png")
+local chase_img = fast.getImage("images/chase.png")
+local bush_img = fast.getImage("images/bush.png")
+local egg_mob = fast.getImage("images/egg_mob.png")
 
-knuck_bg = love.graphics.newImage("images/background/knuck.png")
-knuck_bg2 = love.graphics.newImage("images/background/knuck2.png")
-knuck_bg3 = love.graphics.newImage("images/background/knuck3.png")
+knuck_bg = fast.getImage("images/background/knuck.png")
+knuck_bg2 = fast.getImage("images/background/knuck2.png")
+knuck_bg3 = fast.getImage("images/background/knuck3.png")
 
-local selection_box = love.graphics.newImage("images/selection/box.png")
-local tails_selection = love.graphics.newImage("images/selection/tails_selection.png")
-local knuck_selection = love.graphics.newImage("images/selection/knuckles_selection.png")
-local eggman_selection = love.graphics.newImage("images/selection/eggman_selection.png")
+local selection_box = fast.getImage("images/selection/box.png")
+local tails_selection = fast.getImage("images/selection/tails_selection.png")
+local knuck_selection = fast.getImage("images/selection/knuckles_selection.png")
+local eggman_selection = fast.getImage("images/selection/eggman_selection.png")
 
-local dead_tails = love.graphics.newImage("images/selection/dead_tails.png")
-local dead_knuckles = love.graphics.newImage("images/selection/dead_knuckles.png")
-local dead_eggman = love.graphics.newImage("images/selection/dead_eggman.png")
+local dead_tails = fast.getImage("images/selection/dead_tails.png")
+local dead_knuckles = fast.getImage("images/selection/dead_knuckles.png")
+local dead_eggman = fast.getImage("images/selection/dead_eggman.png")
 
-local test2 = love.graphics.newImage("images/maps/test2.png")
-local test3 = love.graphics.newImage("images/maps/map1.png")
-local knuck1 = love.graphics.newImage("images/maps/knuck1.png")
-local gh1 = love.graphics.newImage("images/maps/gh1.png")
+local test2 = fast.getImage("images/maps/test2.png")
+local test3 = fast.getImage("images/maps/map1.png")
+local knuck1 = fast.getImage("images/maps/knuck1.png")
+local gh1 = fast.getImage("images/maps/gh1.png")
 
-lockImg = love.graphics.newImage("images/lock.png")
+lockImg = fast.getImage("images/lock.png")
 
-Font = love.graphics.newFont("font/font.ttf", 16)
-FontBig = love.graphics.newFont("font/font.ttf", 32)
-Font2 = love.graphics.newFont("font/sonicdebugfont.ttf", 12)
-Font3 = love.graphics.newFont("font/sonicfont.ttf", 32)
-Font4 = love.graphics.newFont("font/font2.ttf", 16)
+Font = fast.getFont("font/font.ttf", 16)
+FontBig = fast.getFont("font/font.ttf", 32)
+Font2 = fast.getFont("font/sonicdebugfont.ttf", 12)
+Font3 = fast.getFont("font/sonicfont.ttf", 32)
+Font4 = fast.getFont("font/font2.ttf", 16)
 
 local soundDefs = {
     sonic_theme = "music/sonic_theme.ogg",
@@ -107,7 +108,7 @@ local soundDefs = {
 local sounds = {}
 
 for name, path in pairs(soundDefs) do
-    sounds[name] = love.audio.newSource(path, "static")
+    sounds[name] = fast.getSound(path, "static")
 end
 
 local images = {}
@@ -117,7 +118,7 @@ selectionIndex = 1
 selectionOptions = {"tails", "knuckles", "eggman"}
 
 local function loadMap(imagePath)
-    local img = love.graphics.newImage(imagePath)
+    local img = fast.getImage(imagePath)
     local imageData = love.image.newImageData(imagePath)
     local w, h = imageData:getDimensions()
     local collision = {}
@@ -136,7 +137,7 @@ local function loadMap(imagePath)
     }
 end
 
-map  = loadMap("images/maps/test.png")
+map = loadMap("images/maps/test.png")
 map1 = loadMap("images/maps/map2.png")
 map2 = loadMap("images/maps/knuck2.png")
 map3 = loadMap("images/maps/gh2.png")
@@ -153,7 +154,7 @@ local function createCharacter(opts)
         grounded = opts.grounded or false,
         jumping = opts.jumping or false,
         direction = 1,
-        jumpHeight = -350,
+        jumpHeight = -375,
         acceleration = 100,
         maxSpeed = opts.maxSpeed or 175,
         friction = 2,
@@ -176,8 +177,8 @@ local function createCharacter(opts)
 end
 
 local chunkSize, renderDistance = 4, 24
-leftwImage = love.graphics.newImage("images/arrows/leftw.png")
-rightwImage = love.graphics.newImage("images/arrows/rightw.png")
+leftwImage = fast.getImage("images/arrows/leftw.png")
+rightwImage = fast.getImage("images/arrows/rightw.png")
 
 flashAlpha = 0
 flashDuration = 0.5
@@ -194,7 +195,7 @@ end
 local function loadFrames(basePath, count)
     local frames = {}
     for i = 1, count do
-        frames[i] = love.graphics.newImage(basePath .. i .. ".png")
+        frames[i] = fast.getImage(basePath .. i .. ".png")
     end
     return frames
 end
@@ -209,37 +210,37 @@ function startTransition(target)
   transitionTarget = target
 end
 
-stage1 = love.graphics.newImage(spritesFolder.."sonic_demo.exe/anim/knuckles/stage1.png")
+stage1 = fast.getImage(spritesFolder.."sonic_demo.exe/anim/knuckles/stage1.png")
 stage1_vis = true
 local s1 = createCharacter{x = 100, y = 50}
 s1.stage2 = loadFrames(spritesFolder .. "sonic_demo.exe/anim/knuckles/stage2/", 2)
 stage2_vis = true
-stage3 = love.graphics.newImage(spritesFolder.."sonic_demo.exe/anim/knuckles/stage3.png")
+stage3 = fast.getImage(spritesFolder.."sonic_demo.exe/anim/knuckles/stage3.png")
 stage3_vis = true
 
 local tails = createCharacter{ x = 100, y = 50, maxSpeed = 200 }
-tails.idle = love.graphics.newImage(spritesFolder .. "tails/idle.png")
-tails.down = love.graphics.newImage(spritesFolder .. "tails/down/1.png")
+tails.idle = fast.getImage(spritesFolder .. "tails/idle.png")
+tails.down = fast.getImage(spritesFolder .. "tails/down/1.png")
 tails.walk = loadFrames(spritesFolder .. "tails/walking/", 8)
 tails.jump = loadFrames(spritesFolder .. "tails/jump/", 3)
 tails.run = loadFrames(spritesFolder .. "tails/run/", 2)
 
 local knuckles = createCharacter{ x = 100, y = 50, maxSpeed = 400 }
-knuckles.idle = love.graphics.newImage(spritesFolder .. "knuckles/idle.png")
+knuckles.idle = fast.getImage(spritesFolder .. "knuckles/idle.png")
 knuckles.walk = loadFrames(spritesFolder .. "knuckles/walking/", 7)
 knuckles.run = loadFrames(spritesFolder .. "knuckles/run/", 4)
 knuckles.jump = loadFrames(spritesFolder .. "knuckles/jump/", 5)
 knuckles.wait = loadFrames(spritesFolder .. "knuckles/confused/", 2)
 
 local eggman = createCharacter{ x = 3300, y = 50, maxSpeed = 140 }
-eggman.idle = love.graphics.newImage(spritesFolder .. "eggman/idle.png")
+eggman.idle = fast.getImage(spritesFolder .. "eggman/idle.png")
 eggman.walk = loadFrames(spritesFolder .. "eggman/walking/", 3)
 eggman.run = loadFrames(spritesFolder .. "eggman/walking/", 3)
 eggman.jump = loadFrames(spritesFolder .. "eggman/walking/", 1)
 
 local sonic_demoexe = createCharacter{x = -100, y = -140 }
-sonic_demoexe.idle = love.graphics.newImage(spritesFolder .. "sonic_demo.exe/idle.png")
-sonic_demoexe.crouch = love.graphics.newImage(spritesFolder .. "sonic_demo.exe/crouch.png")
+sonic_demoexe.idle = fast.getImage(spritesFolder .. "sonic_demo.exe/idle.png")
+sonic_demoexe.crouch = fast.getImage(spritesFolder .. "sonic_demo.exe/crouch.png")
 sonic_demoexe.anim_tails = loadFrames(spritesFolder .. "sonic_demo.exe/anim/tails/", 8)
 sonic_demoexe.float = loadFrames(spritesFolder .. "sonic_demo.exe/float/", 2)
 sonic_demoexe.jump = loadFrames(spritesFolder .. "sonic_demo.exe/jump/", 5)
@@ -252,7 +253,7 @@ local fire_bg = createCharacter{}
 fire_bg.idle = loadFrames("images/background/fire/", 3)
 
 local sonic_demoexe_screen = createCharacter{x = 0, y = 355}
-sonic_demoexe_screen.idle = love.graphics.newImage(spritesFolder .. "screen/idle.png")
+sonic_demoexe_screen.idle = fast.getImage(spritesFolder .. "screen/idle.png")
 
 local tail_tails = {
     x = 100,
@@ -296,9 +297,9 @@ sonic_demoexe = initCharacterSprite(sonic_demoexe, sonic_demoexe.idle)
 sonic_demoexe_screen = initCharacterSprite(sonic_demoexe_screen, sonic_demoexe_screen.idle)
 s1 = initArraySprite(s1, s1.stage2)
 
-title = love.graphics.newImage(spritesFolder .. "menuscreen/title.png")
-circle = love.graphics.newImage(spritesFolder .. "menuscreen/circle.png")
-smth = love.graphics.newImage("images/segamenu.png")
+title = fast.getImage(spritesFolder .. "menuscreen/title.png")
+circle = fast.getImage(spritesFolder .. "menuscreen/circle.png")
+smth = fast.getImage("images/segamenu.png")
 
 local colorTL = {0x42/255, 0x5B/255, 0x1D/255, 1}
 local colorTR = {0xA2/255, 0xA0/255, 0x20/255, 1}
@@ -347,9 +348,9 @@ local jumpButton = {
     active = false
 }
 
-joystickBaseImage = love.graphics.newImage("images/mobile_stuff/base.png")
-joystickKnobImage = love.graphics.newImage("images/mobile_stuff/knob.png")
-jumpButtonImage = love.graphics.newImage("images/mobile_stuff/jump.png")
+joystickBaseImage = fast.getImage("images/mobile_stuff/base.png")
+joystickKnobImage = fast.getImage("images/mobile_stuff/knob.png")
+jumpButtonImage = fast.getImage("images/mobile_stuff/jump.png")
 
 function love.load()
     love.window.setMode(base_width * SCALE, base_height * SCALE, {
@@ -362,6 +363,7 @@ function love.load()
     love.window.setIcon(love.image.newImageData("images/game_icon.png"))
     canvas = love.graphics.newCanvas(base_width, base_height)
     updateCanvasScale()
+    fast.fpsCap = 60
 
     if ok and discord then
         local success, err = pcall(function()
@@ -383,11 +385,11 @@ function love.load()
     else
         print("no discord RPC")
     end
-    images.score = love.graphics.newImage("images/stats/score.png")
-    images.time = love.graphics.newImage("images/stats/time.png")
-    images.rings = love.graphics.newImage("images/stats/rings.png")
-    images.numbers = love.graphics.newImage("images/stats/numbers.png")
-    images.william = love.graphics.newImage("images/stats/live.png")
+    images.score = fast.getImage("images/stats/score.png")
+    images.time = fast.getImage("images/stats/time.png")
+    images.rings = fast.getImage("images/stats/rings.png")
+    images.numbers = fast.getImage("images/stats/numbers.png")
+    images.william = fast.getImage("images/stats/live.png")
 
     quads.numbers = {}
     local w, h = images.numbers:getDimensions()
@@ -644,6 +646,20 @@ local crashAlpha = 0
 local crashMaxAlpha = 0.5
 local fadeDuration = 0.25
 
+local MAX_SLOPE_ANGLE = 45
+local SLOPE_FRICTION = 0.85
+
+function applySlopePhysics(char, angle, dt)
+    local horizontalVelocity = char.velocity.x * math.cos(angle)
+    local verticalVelocity = char.velocity.y * math.sin(angle)
+    horizontalVelocity = horizontalVelocity * SLOPE_FRICTION
+    verticalVelocity = verticalVelocity * SLOPE_FRICTION
+    char.velocity.x = horizontalVelocity
+    char.velocity.y = verticalVelocity
+    char.x = char.x + horizontalVelocity * dt
+    char.y = char.y + verticalVelocity * dt
+end
+
 local function getGroundAngle(char, map)
     local sampleDist = 6
     local function sampleY(offset)
@@ -669,6 +685,53 @@ local function quantizeAngle(angle)
     return math.rad(deg)
 end
 
+local CAM_HZ_BOUND = 16
+local CAM_VT_BOUND = 48
+local CAM_LOOK_OFFSET = 64
+local CAM_RETURN_SPEED = 60
+
+function updateCamera(dt, char, mapWidth, mapHeight)
+    local targetX = camera.x
+    local targetY = camera.y
+
+    local screenCenterX = camera.x + base_width / 2
+    if char.x > screenCenterX + CAM_HZ_BOUND then
+        targetX = targetX + (char.x - (screenCenterX + CAM_HZ_BOUND))
+    elseif char.x < screenCenterX - CAM_HZ_BOUND then
+        targetX = targetX - ((screenCenterX - CAM_HZ_BOUND) - char.x)
+    end
+
+    local screenCenterY = camera.y + base_height / 2
+    if char.y > screenCenterY + CAM_VT_BOUND then
+        targetY = targetY + (char.y - (screenCenterY + CAM_VT_BOUND))
+    elseif char.y < screenCenterY - CAM_VT_BOUND then
+        targetY = targetY - ((screenCenterY - CAM_VT_BOUND) - char.y)
+    end
+
+    if getControls then
+        local _, _, _, lookUp, lookDown = getControls()
+        if lookUp then
+            targetY = targetY - CAM_LOOK_OFFSET
+        elseif lookDown then
+            targetY = targetY + CAM_LOOK_OFFSET
+        else
+            local defaultY = clamp(char.y - base_height / 2 - 30, 0, mapHeight - base_height)
+            if math.abs(targetY - defaultY) > 1 then
+                local diff = defaultY - targetY
+                local step = CAM_RETURN_SPEED * dt * (diff > 0 and 1 or -1)
+                if math.abs(step) > math.abs(diff) then step = diff end
+                targetY = targetY + step
+            end
+        end
+    end
+
+    targetX = clamp(targetX, 0, mapWidth - base_width)
+    targetY = clamp(targetY, 0, mapHeight - base_height)
+
+    camera.x = math.floor(targetX + 0.5)
+    camera.y = math.floor(targetY + 0.5)
+end
+
 local function test_update(dt, char, map)
     local mapWidth, mapHeight = map.width or 2000, map.height or 1080
     if not char.grounded then
@@ -676,8 +739,6 @@ local function test_update(dt, char, map)
     end
 
     if tail_tails.idle then updateSprite(dt * 0.5, tail_tails.idle, tail_tails) end
-    if char.idle then char.angle = 0 end
-
     local moveRight, moveLeft, jump, lookUp, lookDown, fallThroughInput = getControls()
 
     if char ~= sonic_demoexe then
@@ -811,12 +872,7 @@ local function test_update(dt, char, map)
     if char ~= sonic_demoexe and char.y >= mapHeight + 40 then love.event.quit() end
 
     if char ~= sonic_demoexe then
-        camera.targetX = clamp(char.x - base_width / 2, 0, mapWidth - base_width)
-        --if char.grounded or char.jumping then
-        camera.targetY = clamp(char.y - base_height / 2 - 30, 0, mapHeight - base_height)
-        --end
-        camera.x = math.floor(camera.targetX + 0.5)
-        camera.y = math.floor(camera.targetY + 0.5)
+        updateCamera(dt, char, mapWidth, mapHeight)
     end
 
     updateGamestate(dt, char)
@@ -1125,10 +1181,10 @@ finished_transformation = false
 splash_timer = 0
 splash_done = false
 
-emhi_bg = love.graphics.newImage("images/background/emerald hill.png")
-menu_finished = love.graphics.newImage("images/background/menu_finished.png")
-menu = love.graphics.newImage("images/background/menu.png")
-menu2 = love.graphics.newImage("images/background/menu2.png")
+emhi_bg = fast.getImage("images/background/emerald hill.png")
+menu_finished = fast.getImage("images/background/menu_finished.png")
+menu = fast.getImage("images/background/menu.png")
+menu2 = fast.getImage("images/background/menu2.png")
 
 local bgX1 = 0
 local bgX2 = menu:getWidth()
@@ -1274,7 +1330,7 @@ function drawStageAct(img, x, y)
 end
 function drawTitleCard(stageNameImg, circleImg, actImg, baseX, baseY)
     drawStageCircle(circleImg, baseX + 10, baseY)
-    drawStageName(stageNameImg, baseX, baseY)
+    drawStageName(stageNameImg, -baseX + 225, baseY)
     love.graphics.draw(stageActImg, baseX + stageNameImg:getWidth() - 25, baseY + circleImg:getHeight() - 4)
     drawStageAct(actImg, baseX + stageNameImg:getWidth() + 10, baseY + circleImg:getHeight() - 20)
 end
@@ -1339,13 +1395,7 @@ function update_flash(dt)
     end
 end
 
-function love.update(dt)
-    gameTime = gameTime + dt
-    if ok and discord then
-        discord.runCallbacks()
-    end
-    update_flash(dt)
-
+function ring_anim(dt)
     if stats.rings == 0 then
         ringAnimTimer = ringAnimTimer + dt
         if ringAnimTimer >= ringAnimSpeed then
@@ -1356,6 +1406,15 @@ function love.update(dt)
         ringAnimState = true
         ringAnimTimer = 0
     end
+end
+
+function love.update(dt)
+    gameTime = gameTime + dt
+    if ok and discord then
+        discord.runCallbacks()
+    end
+    update_flash(dt)
+    ring_anim(dt)
 
     if gamestate == "test" then
         test_update(dt, tails, map)
@@ -1668,25 +1727,25 @@ local function drawScrollingBG(image, x1, x2, offsetX, offsetY)
     love.graphics.draw(image, x2 + offsetX, offsetY)
 end
 
-DEMO_MenuScreen = love.graphics.newImage(spritesFolder.."menuscreen/splash/6.png")
+DEMO_MenuScreen = fast.getImage(spritesFolder.."menuscreen/splash/6.png")
 
-local greenHillZoneTitle = love.graphics.newImage("images/zone/titles/zone.png")
-greenHillZoneTitle_2 = love.graphics.newImage("images/zone/titles/g_hill.png")
-local udZoneTitle = love.graphics.newImage("images/zone/titles/u_d.png")
-local hideAndSeekZoneTitle = love.graphics.newImage("images/zone/titles/h&s.png")
-local DotTitle = love.graphics.newImage("images/zone/titles/dot.png")
-labTitle = love.graphics.newImage("images/zone/titles/us.png")
+local greenHillZoneTitle = fast.getImage("images/zone/titles/zone.png")
+greenHillZoneTitle_2 = fast.getImage("images/zone/titles/g_hill.png")
+local udZoneTitle = fast.getImage("images/zone/titles/u_d.png")
+local hideAndSeekZoneTitle = fast.getImage("images/zone/titles/h&s.png")
+local DotTitle = fast.getImage("images/zone/titles/dot.png")
+labTitle = fast.getImage("images/zone/titles/us.png")
 
-greenHillZoneCircles = love.graphics.newImage("images/zone/circles/g_hill.png")
-greenHillZoneCircles_2 = love.graphics.newImage("images/zone/circles/g_hill_2.png")
-local udZoneCircles = love.graphics.newImage("images/zone/circles/u_d.png")
-local hideAndSeekZoneCircles = love.graphics.newImage("images/zone/circles/h&s.png")
-local DotCircles = love.graphics.newImage("images/zone/circles/dot.png")
-labCircles = love.graphics.newImage("images/zone/circles/us.png")
+greenHillZoneCircles = fast.getImage("images/zone/circles/g_hill.png")
+greenHillZoneCircles_2 = fast.getImage("images/zone/circles/g_hill_2.png")
+local udZoneCircles = fast.getImage("images/zone/circles/u_d.png")
+local hideAndSeekZoneCircles = fast.getImage("images/zone/circles/h&s.png")
+local DotCircles = fast.getImage("images/zone/circles/dot.png")
+labCircles = fast.getImage("images/zone/circles/us.png")
 
-stageActImg = love.graphics.newImage("images/zone/act/act.png")
-stageActImg1 = love.graphics.newImage("images/zone/act/1.png")
-stageActImg2 = love.graphics.newImage("images/zone/act/2.png")
+stageActImg = fast.getImage("images/zone/act/act.png")
+stageActImg1 = fast.getImage("images/zone/act/1.png")
+stageActImg2 = fast.getImage("images/zone/act/2.png")
 
 function linear(a, b, t)
     a = tonumber(a) or 0
@@ -2227,50 +2286,6 @@ function updateCanvasScale()
     local scaled_height = base_height * scale_factor
     offset_x = (window_width - scaled_width) / 2
     offset_y = (window_height - scaled_height) / 2
-end
-
-function love.run()
-    if love.load then love.load(love.arg.parseGameArguments(arg), arg) end
-
-    if love.timer then love.timer.step() end
-
-    local dt = 0
-    local fps = 60
-    local frameTime = 1 / fps
-
-    return function()
-        if love.event then
-            love.event.pump()
-            for name, a,b,c,d,e,f in love.event.poll() do
-                if name == "quit" then
-                    if not love.quit or not love.quit() then
-                        return a or 0
-                    end
-                end
-                love.handlers[name](a,b,c,d,e,f)
-            end
-        end
-
-        if love.timer then
-            love.timer.step()
-            dt = love.timer.getDelta()
-        end
-
-        if love.update then love.update(dt) end
-
-        if love.graphics and love.graphics.isActive() then
-            love.graphics.origin()
-            love.graphics.clear(love.graphics.getBackgroundColor())
-
-            if love.draw then love.draw() end
-
-            love.graphics.present()
-        end
-        local sleepTime = frameTime - love.timer.getDelta()
-        if sleepTime > 0 then
-            love.timer.sleep(sleepTime)
-        end
-    end
 end
 
 function love.keypressed(key)
