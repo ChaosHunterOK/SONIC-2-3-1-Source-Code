@@ -5,7 +5,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "test"
+local gamestate = "knuck"
 
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
@@ -93,7 +93,7 @@ local soundDefs = {
     walking_on_metalSound = "sounds/walking_on_metal.mp3",
     reboot_old = "sounds/reboot_old.ogg",
     metalSound = "sounds/metal.ogg",
-    bossMusic = "music/boss.ogg",
+    bossMusic = "music/Demo_fight.mp3",
     tails_stage = "music/tails_stage.ogg",
     demo_song = "music/demo_song.ogg",
     glitch_sound = "sounds/glitch_sound.mp3",
@@ -247,6 +247,7 @@ sonic_demoexe.jump = loadFrames(spritesFolder .. "sonic_demo.exe/jump/", 5)
 sonic_demoexe.run = loadFrames(spritesFolder .. "sonic_demo.exe/run/", 4)
 sonic_demoexe.walk = loadFrames(spritesFolder .. "sonic_demo.exe/walk/", 6)
 sonic_demoexe.fly = loadFrames(spritesFolder .. "sonic_demo.exe/fly/fly", 2)
+sonic_demoexe.fall = loadFrames(spritesFolder .. "sonic_demo.exe/fall/", 2)
 sonic_demoexe.kill_tails = loadFrames(spritesFolder .. "sonic_demo.exe/kill/test/", 7)
 
 local fire_bg = createCharacter{}
@@ -515,36 +516,6 @@ local function easeOutCubic(t)
     return 1 - (1 - t)^3
 end
 
-local function isSolidPixel(x, y, map)
-    local tx, ty = math.floor(x), math.floor(y)
-    if tx < 0 or ty < 0 or tx >= map.width or ty >= map.height then return false end
-    return map.collision[ty] and map.collision[ty][tx] or false
-end
-
-local function isPassThroughTile(x, y) return false end
-
-local MAX_STEP_HEIGHT = 10
-
-local function checkCollision(char, map, x, y, ignoreBelow)
-    local left = math.floor(x - char.width / 2)
-    local right = math.floor(x + char.width / 2 - 1)
-    local top = math.floor(y - char.height / 2)
-    local bottom = math.floor(y + char.height / 2 - 1)
-
-    for ty = top, bottom do
-        for tx = left, right do
-            if isSolidPixel(tx, ty, map) then
-                if ignoreBelow and ty >= bottom and not isPassThroughTile(tx, ty) then
-                    return true
-                elseif not ignoreBelow then
-                    return true
-                end
-            end
-        end
-    end
-    return false
-end
-
 local function updateSprite(dt, spriteTable, char)
     char.spriteIndex = char.spriteIndex + dt * 10
     if char.spriteIndex >= #spriteTable + 1 then
@@ -634,9 +605,8 @@ function getControls()
     local jump = love.keyboard.isDown("space") or jumpButton.active
     local lookUp = love.keyboard.isDown("up") or (joystick.dy < -0.25 and not jump)
     local lookDown = love.keyboard.isDown("down") and not jump or (joystick.dy > 0.25 and not jump)
-    local fallThroughInput = love.keyboard.isDown("down") and jump or (joystick.dy > 0.25 and jump)
 
-    return moveRight, moveLeft, jump, lookUp, lookDown, fallThroughInput
+    return moveRight, moveLeft, jump, lookUp, lookDown
 end
 
 local crashing = false
@@ -646,35 +616,48 @@ local crashAlpha = 0
 local crashMaxAlpha = 0.5
 local fadeDuration = 0.25
 
-local MAX_SLOPE_ANGLE = 45
-local SLOPE_FRICTION = 0.85
+local SLOPE_FRICTION = 0.96875
+local AIR_DRAG = 0.99609375
+local GROUND_DECEL = 0.125
+local JUMP_VELOCITY = -6.5
+local MAX_STEP_HEIGHT = 14
 
-function applySlopePhysics(char, angle, dt)
-    local horizontalVelocity = char.velocity.x * math.cos(angle)
-    local verticalVelocity = char.velocity.y * math.sin(angle)
-    horizontalVelocity = horizontalVelocity * SLOPE_FRICTION
-    verticalVelocity = verticalVelocity * SLOPE_FRICTION
-    char.velocity.x = horizontalVelocity
-    char.velocity.y = verticalVelocity
-    char.x = char.x + horizontalVelocity * dt
-    char.y = char.y + verticalVelocity * dt
+local function isSolidPixel(x, y, map)
+    local tx, ty = math.floor(x), math.floor(y)
+    if tx < 0 or ty < 0 or tx >= map.width or ty >= map.height then return false end
+    return map.collision[ty] and map.collision[ty][tx] or false
+end
+
+local function checkCollision(char, map, x, y)
+    local left   = math.floor(x - char.width / 2)
+    local right  = math.floor(x + char.width / 2 - 1)
+    local top    = math.floor(y - char.height / 2)
+    local bottom = math.floor(y + char.height / 2 - 1)
+
+    for ty = top, bottom do
+        for tx = left, right do
+            if isSolidPixel(tx, ty, map) then
+                return true
+            end
+        end
+    end
+    return false
 end
 
 local function getGroundAngle(char, map)
-    local sampleDist = 6
-    local function sampleY(offset)
-        for i = 0, MAX_STEP_HEIGHT + 5 do
-            if not checkCollision(char, map, char.x + offset, char.y - i) then
-                return char.y - i
+    local dist = 9
+    local function sample(xOffset)
+        for i = 0, MAX_STEP_HEIGHT do
+            if checkCollision(char, map, char.x + xOffset, char.y + i) then
+                return char.y + i
             end
         end
         return char.y
     end
-
-    local yLeft = sampleY(-sampleDist)
-    local yRight = sampleY(sampleDist)
-    local dy = math.abs(yRight - yLeft) <= 6 and 0 or (yRight - yLeft)
-    return math.atan2(dy, sampleDist * 2), dy
+    local yLeft  = sample(-dist)
+    local yRight = sample(dist)
+    local dy = yRight - yLeft
+    return math.atan2(dy, dist * 2), dy
 end
 
 local function quantizeAngle(angle)
@@ -687,8 +670,6 @@ end
 
 local CAM_HZ_BOUND = 16
 local CAM_VT_BOUND = 48
-local CAM_LOOK_OFFSET = 64
-local CAM_RETURN_SPEED = 60
 
 function updateCamera(dt, char, mapWidth, mapHeight)
     local targetX = camera.x
@@ -708,23 +689,6 @@ function updateCamera(dt, char, mapWidth, mapHeight)
         targetY = targetY - ((screenCenterY - CAM_VT_BOUND) - char.y)
     end
 
-    if getControls then
-        local _, _, _, lookUp, lookDown = getControls()
-        if lookUp then
-            targetY = targetY - CAM_LOOK_OFFSET
-        elseif lookDown then
-            targetY = targetY + CAM_LOOK_OFFSET
-        else
-            local defaultY = clamp(char.y - base_height / 2 - 30, 0, mapHeight - base_height)
-            if math.abs(targetY - defaultY) > 1 then
-                local diff = defaultY - targetY
-                local step = CAM_RETURN_SPEED * dt * (diff > 0 and 1 or -1)
-                if math.abs(step) > math.abs(diff) then step = diff end
-                targetY = targetY + step
-            end
-        end
-    end
-
     targetX = clamp(targetX, 0, mapWidth - base_width)
     targetY = clamp(targetY, 0, mapHeight - base_height)
 
@@ -736,10 +700,12 @@ local function test_update(dt, char, map)
     local mapWidth, mapHeight = map.width or 2000, map.height or 1080
     if not char.grounded then
         char.velocity.y = char.velocity.y + gravity * dt
+        char.velocity.x = char.velocity.x * AIR_DRAG
     end
-
-    if tail_tails.idle then updateSprite(dt * 0.5, tail_tails.idle, tail_tails) end
-    local moveRight, moveLeft, jump, lookUp, lookDown, fallThroughInput = getControls()
+    if tail_tails.idle then
+        updateSprite(dt * 0.5, tail_tails.idle, tail_tails)
+    end
+    local moveRight, moveLeft, jump, lookUp, lookDown = getControls()
 
     if char ~= sonic_demoexe then
         if char.grounded and (lookUp or lookDown) then
@@ -747,13 +713,11 @@ local function test_update(dt, char, map)
             char.spriteIndex = 1
             char.currentSprite = lookUp and (char.up or char.idle) or (char.down or char.idle)
             char.angle = 0
-            return
-        end
-
-        if moveRight or moveLeft then
+        elseif moveRight or moveLeft then
             local dir = moveRight and 1 or -1
             char.direction = dir
-            char.velocity.x = clamp(char.velocity.x + dir * char.acceleration * dt, -char.maxSpeed, char.maxSpeed)
+            char.velocity.x = char.velocity.x + dir * char.acceleration * dt
+            char.velocity.x = clamp(char.velocity.x, -char.maxSpeed, char.maxSpeed)
 
             if char.jumping then
                 updateSprite(dt, char.jump, char)
@@ -764,22 +728,17 @@ local function test_update(dt, char, map)
                 updateSprite(dt, char.walk, char)
             end
         else
-            char.velocity.x = char.velocity.x * 0.85
-            if math.abs(char.velocity.x) <= 2 then
+            char.velocity.x = char.velocity.x * (char.grounded and (1 - GROUND_DECEL) or 0.98)
+            if math.abs(char.velocity.x) <= 0.1 then
                 char.velocity.x = 0
                 if not char.jumping then
                     char.spriteIndex = 1
                     char.currentSprite = char.idle
                     char.angle = 0
-                else
-                    updateSprite(dt, char.jump, char)
                 end
-            else
-                updateSprite(dt, char.jumping and char.jump or char.walk, char)
             end
         end
-
-        if jump and not char.jumping and not fallThroughInput then
+        if jump and char.grounded and not char.jumping then
             char.velocity.y = char.jumpHeight
             char.spriteIndex = 1
             updateSprite(dt, char.jump, char)
@@ -794,20 +753,21 @@ local function test_update(dt, char, map)
         char.angle = quantizeAngle(rawAngle)
 
         if math.abs(char.velocity.x) >= char.runThreshold and math.abs(math.deg(char.angle)) >= 80 then
-            char.velocity.y = 0
-            char.y = char.y - char.velocity.x * dt * (char.direction or 1)
-            if not checkCollision(char, map, char.x, char.y - 1) then
-                char.velocity.y = char.jumpHeight
-                char.jumping = true
-                char.grounded = false
-                sounds.jump_sound:play()
-            end
+            char.velocity.y = char.jumpHeight
+            char.jumping = true
+            char.grounded = false
         elseif dy ~= 0 then
-            char.y = char.y + dy * 0.5
+            local lowSpeed = math.abs(char.velocity.x) < 0.6
+            if char.currentSprite == char.idle or char.currentSprite == char.down or char.currentSprite == char.up or lowSpeed then
+                char.y = char.y + dy * 0.1
+            else
+                char.y = char.y + dy
+            end
         end
     end
 
-    local nextX, nextY = char.x + char.velocity.x * dt, char.y + char.velocity.y * dt
+    local nextX = char.x + char.velocity.x * dt
+    local nextY = char.y + char.velocity.y * dt
 
     if not checkCollision(char, map, nextX, char.y) then
         char.x = nextX
@@ -820,66 +780,34 @@ local function test_update(dt, char, map)
                 break
             end
         end
-        if not stepped then char.velocity.x = 0 end
-    end
-
-    local function applyVertical(yTarget, fallThrough)
-        if not checkCollision(char, map, char.x, yTarget, fallThrough) then
-            char.y = yTarget
-            char.grounded = false
-        else
-            if char.velocity.y < 0 then
-                char.velocity.y = 0
-                char.jumping = true
-                char.grounded = false
-                char.y = char.y + 1
-            else
-                local found = false
-                for i = 0, MAX_STEP_HEIGHT do
-                    if not checkCollision(char, map, char.x, yTarget - i, fallThrough) then
-                        char.y = yTarget - i
-                        char.velocity.y = 0
-                        char.grounded = true
-                        char.jumping = false
-                        found = true
-                        break
-                    end
-                end
-                if not found then
-                    char.velocity.y = 0
-                    char.grounded = true
-                    char.jumping = false
-                end
-            end
+        if not stepped then
+            char.velocity.x = 0
         end
     end
 
-    applyVertical(nextY, false)
-
-    if char.grounded then
-        local yDiff = math.abs(char.y - (char.lastGroundedY or char.y))
-        if yDiff <= 1 then
-            char.y = char.lastGroundedY or char.y
-        else
-            char.lastGroundedY = char.y
-        end
+    if not checkCollision(char, map, char.x, nextY) then
+        char.y = nextY
+        char.grounded = false
     else
-        char.lastGroundedY = char.y
+        if char.velocity.y > 0 then
+            char.grounded = true
+            char.jumping = false
+        end
+        char.velocity.y = 0
     end
-
-    if char.x < 15 then char.x = 15; char.velocity.x = math.max(0, char.velocity.x)
-    elseif char.x > mapWidth - 15 then char.x = mapWidth - 15; char.velocity.x = math.min(0, char.velocity.x) end
-    if char ~= sonic_demoexe and char.y >= mapHeight + 40 then love.event.quit() end
+    if char.x < 15 then
+        char.x, char.velocity.x = 15, math.max(0, char.velocity.x)
+    elseif char.x > mapWidth - 15 then
+        char.x, char.velocity.x = mapWidth - 15, math.min(0, char.velocity.x)
+    end
 
     if char ~= sonic_demoexe then
+        if char.y >= mapHeight + 40 then
+            love.event.quit()
+        end
         updateCamera(dt, char, mapWidth, mapHeight)
     end
-
     updateGamestate(dt, char)
-end
-
-function math.sign(x)
-    return (x > 0 and 1) or (x < 0 and -1) or 0
 end
 
 local hs_timer = 7
@@ -905,6 +833,44 @@ local previousDirection = sonic_demoexe.direction
 
 local jumpTimer = 0
 local jumpInterval = 1
+
+sonic_demoexe.bounceCount = 0
+
+local function handleBounce(knuck, demo, dt)
+    local overlapX = math.abs(knuck.x - demo.x) < (knuck.width + demo.width) / 2
+    local overlapY = math.abs(knuck.y - demo.y) < (knuck.height + demo.height) / 2
+
+    if overlapX and overlapY then
+        if knuck.jumping or demo.jumping then
+            local bounceStrength = 200
+            demo.bounceCount = (demo.bounceCount or 0) + 1
+
+            if demo.bounceCount >= 2 then
+                demo.velocity.y = 0
+                demo.jumping = false
+                demo.grounded = false
+                demo.bounceCount = 0
+                demo.currentSprite = demo.fall[1]
+                demo.fallTimer = 0
+            else
+                knuck.velocity.y = -bounceStrength
+                demo.velocity.y = -bounceStrength
+                knuck.jumping = true
+                knuck.grounded = false
+                demo.jumping = true
+                demo.grounded = false
+
+                if knuck.x < demo.x then
+                    knuck.velocity.x = knuck.velocity.x - 50
+                    demo.velocity.x = demo.velocity.x + 50
+                else
+                    knuck.velocity.x = knuck.velocity.x + 50
+                    demo.velocity.x = demo.velocity.x - 50
+                end
+            end
+        end
+    end
+end
 
 function knuck_up(dt)
     updateSprite(dt * 0.5, s1.stage2, s1)
@@ -934,7 +900,8 @@ function knuck_up(dt)
     if knuckles.x > 5990 then
         waiting_knuck = waiting_knuck + dt
 
-        if waiting_knuck >= 3 then
+        if waiting_knuck >= 2 then
+            sounds.bossMusic:play()
             if sonic_demoexe.x > 6484 then
                 sonic_demoexe.direction = -1
             elseif sonic_demoexe.x < 5993 then
@@ -969,13 +936,17 @@ function knuck_up(dt)
                 end
             end
 
+            handleBounce(knuckles, sonic_demoexe, dt)
+
             if sonic_demoexe.velocity.x < targetSpeed then
                 sonic_demoexe.velocity.x = math.min(sonic_demoexe.velocity.x + accel * dt, targetSpeed)
             elseif sonic_demoexe.velocity.x > targetSpeed then
                 sonic_demoexe.velocity.x = math.max(sonic_demoexe.velocity.x - accel * dt, targetSpeed)
             end
 
-            if sonic_demoexe.jumping then
+            if sonic_demoexe.currentSprite == sonic_demoexe.fall[1] then
+                updateSprite(dt, sonic_demoexe.fall, sonic_demoexe)
+            elseif sonic_demoexe.jumping then
                 updateSprite(dt, sonic_demoexe.jump, sonic_demoexe)
             elseif math.abs(sonic_demoexe.velocity.x) < math.abs(targetSpeed) * 0.9 then
                 updateSprite(dt, sonic_demoexe.walk, sonic_demoexe)
@@ -1063,7 +1034,7 @@ function hide_and_seek(dt)
         end
     end
 
-    local moveRight, moveLeft, jump, lookUp, lookDown, fallThroughInput = getControls()
+    local moveRight, moveLeft, jump, lookUp, lookDown = getControls()
     tails_hiding = false
     for _, bush in ipairs(bushes) do
         if tails.x > bush.x and tails.x < bush.x + bush_img:getWidth() and
@@ -1075,11 +1046,11 @@ function hide_and_seek(dt)
     end
 
     if tails_caught then
-        tails.velocity.y = tails.velocity.y + gravity * dt
-        sonic_demoexe.velocity.y = sonic_demoexe.velocity.y + gravity * dt
+        sonic_demoexe.velocity.y = 0
+        sonic_demoexe.grounded = true
 
+        tails.velocity.y = tails.velocity.y + gravity * dt
         local nextTailY = tails.y + tails.velocity.y * dt
-        local nextSonicY = sonic_demoexe.y + sonic_demoexe.velocity.y * dt
 
         if not checkCollision(tails, map1, tails.x, nextTailY) then
             tails.y = nextTailY
@@ -1088,15 +1059,6 @@ function hide_and_seek(dt)
             tails.y = nextTailY
             tails.velocity.y = 0
             tails.grounded = true
-        end
-
-        if not checkCollision(sonic_demoexe, map1, sonic_demoexe.x, nextSonicY) then
-            sonic_demoexe.y = nextSonicY
-            sonic_demoexe.grounded = false
-        else
-            sonic_demoexe.y = nextSonicY
-            sonic_demoexe.velocity.y = 0
-            sonic_demoexe.grounded = true
         end
 
         updateSprite(dt, sonic_demoexe.kill_tails, sonic_demoexe)
@@ -1108,7 +1070,7 @@ function hide_and_seek(dt)
         return
     end
 
-    updateSprite(dt * 0.5, fire_bg.idle, fire_bg)
+    updateSprite(dt * 0.6, fire_bg.idle, fire_bg)
 
     if tails_hiding then
         hs_timer = 12
@@ -1136,7 +1098,7 @@ function hide_and_seek(dt)
         local dx = tails.x - sonic_demoexe.x
 
         if dx ~= 0 then
-            sonic_demoexe.x = sonic_demoexe.x + (dx / math.abs(dx)) * 355 * dt
+            sonic_demoexe.x = sonic_demoexe.x + (dx / math.abs(dx)) * 542 * dt
         end
 
         local dy = tails.y - sonic_demoexe.y
