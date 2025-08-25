@@ -676,6 +676,7 @@ local function test_update(dt, char, map)
     end
 
     if tail_tails.idle then updateSprite(dt * 0.5, tail_tails.idle, tail_tails) end
+    if char.idle then char.angle = 0 end
 
     local moveRight, moveLeft, jump, lookUp, lookDown, fallThroughInput = getControls()
 
