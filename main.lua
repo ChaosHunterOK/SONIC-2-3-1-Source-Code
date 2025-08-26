@@ -644,20 +644,22 @@ local function checkCollision(char, map, x, y)
     return false
 end
 
+local function getGroundY(char, map, x)
+    for i = 0, MAX_STEP_HEIGHT or 8 do
+        if checkCollision(char, map, x, char.y + i) then
+            return char.y + i
+        end
+    end
+    return char.y
+end
+
 local function getGroundAngle(char, map)
     local dist = 9
-    local function sample(xOffset)
-        for i = 0, MAX_STEP_HEIGHT do
-            if checkCollision(char, map, char.x + xOffset, char.y + i) then
-                return char.y + i
-            end
-        end
-        return char.y
-    end
-    local yLeft  = sample(-dist)
-    local yRight = sample(dist)
+    local yLeft  = getGroundY(char, map, char.x - dist)
+    local yRight = getGroundY(char, map, char.x + dist)
     local dy = yRight - yLeft
-    return math.atan2(dy, dist * 2), dy
+    local angle = math.atan2(dy, dist * 2)
+    return angle, dy
 end
 
 local function quantizeAngle(angle)
@@ -666,6 +668,23 @@ local function quantizeAngle(angle)
     elseif deg < -22.5 then deg = -45
     else deg = 0 end
     return math.rad(deg)
+end
+
+local function handleSlopes(char, map)
+    if char.grounded then
+        local angle, dy = getGroundAngle(char, map)
+        char.angle = quantizeAngle(angle)
+        if dy ~= 0 then
+            local lowSpeed = math.abs(char.velocity.x) < 0.6
+            local factor = (lowSpeed or char.currentSprite == char.idle) and 0.1 or 1
+            char.y = char.y + dy * factor
+        end
+        local slopeAngle = math.deg(char.angle)
+        if slopeAngle ~= 0 then
+            local slopeDir = dy > 0 and 1 or -1
+            char.velocity.x = char.velocity.x * (1 - 0.05) + slopeDir * 5
+        end
+    end
 end
 
 local CAM_HZ_BOUND = 16
@@ -698,72 +717,62 @@ end
 
 local function test_update(dt, char, map)
     local mapWidth, mapHeight = map.width or 2000, map.height or 1080
+    gravity = gravity or 800
+
     if not char.grounded then
         char.velocity.y = char.velocity.y + gravity * dt
-        char.velocity.x = char.velocity.x * AIR_DRAG
+        char.velocity.x = char.velocity.x * (AIR_DRAG or 0.99)
     end
-    if tail_tails.idle then
+
+    if tail_tails and tail_tails.idle then
         updateSprite(dt * 0.5, tail_tails.idle, tail_tails)
     end
+
     local moveRight, moveLeft, jump, lookUp, lookDown = getControls()
 
     if char ~= sonic_demoexe then
         if char.grounded and (lookUp or lookDown) then
             char.velocity.x = 0
-            char.spriteIndex = 1
             char.currentSprite = lookUp and (char.up or char.idle) or (char.down or char.idle)
             char.angle = 0
         elseif moveRight or moveLeft then
             local dir = moveRight and 1 or -1
             char.direction = dir
-            char.velocity.x = char.velocity.x + dir * char.acceleration * dt
-            char.velocity.x = clamp(char.velocity.x, -char.maxSpeed, char.maxSpeed)
-
-            if char.jumping then
-                updateSprite(dt, char.jump, char)
-                char.angle = 0
-            elseif math.abs(char.velocity.x) >= char.runThreshold then
-                updateSprite(dt, char.run, char)
-            else
-                updateSprite(dt, char.walk, char)
-            end
+            char.velocity.x = char.velocity.x + dir * (char.acceleration or 600) * dt
+            char.velocity.x = clamp(char.velocity.x, -(char.maxSpeed or 200), char.maxSpeed or 200)
         else
-            char.velocity.x = char.velocity.x * (char.grounded and (1 - GROUND_DECEL) or 0.98)
+            char.velocity.x = char.velocity.x * (char.grounded and (1 - (GROUND_DECEL or 0.1)) or 0.98)
             if math.abs(char.velocity.x) <= 0.1 then
                 char.velocity.x = 0
                 if not char.jumping then
-                    char.spriteIndex = 1
                     char.currentSprite = char.idle
                     char.angle = 0
                 end
             end
         end
+
         if jump and char.grounded and not char.jumping then
-            char.velocity.y = char.jumpHeight
-            char.spriteIndex = 1
+            char.velocity.y = char.jumpHeight or -300
             updateSprite(dt, char.jump, char)
             char.jumping = true
             char.grounded = false
-            sounds.jump_sound:play()
+            if sounds.jump_sound then sounds.jump_sound:play() end
+        end
+
+        if char.jumping then
+            updateSprite(dt, char.jump, char)
+        elseif math.abs(char.velocity.x) >= (char.runThreshold) then
+            updateSprite(dt, char.run, char)
+        elseif math.abs(char.velocity.x) > 0 then
+            local speedFactor = math.abs(char.velocity.x) / 175 + 0.3
+            updateSprite(dt * speedFactor, char.walk, char)
+        else
+            char.currentSprite = char.idle
         end
     end
 
     if char.grounded then
-        local rawAngle, dy = getGroundAngle(char, map)
-        char.angle = quantizeAngle(rawAngle)
-
-        if math.abs(char.velocity.x) >= char.runThreshold and math.abs(math.deg(char.angle)) >= 80 then
-            char.velocity.y = char.jumpHeight
-            char.jumping = true
-            char.grounded = false
-        elseif dy ~= 0 then
-            local lowSpeed = math.abs(char.velocity.x) < 0.6
-            if char.currentSprite == char.idle or char.currentSprite == char.down or char.currentSprite == char.up or lowSpeed then
-                char.y = char.y + dy * 0.1
-            else
-                char.y = char.y + dy
-            end
-        end
+        handleSlopes(char, map)
     end
 
     local nextX = char.x + char.velocity.x * dt
@@ -773,7 +782,7 @@ local function test_update(dt, char, map)
         char.x = nextX
     else
         local stepped = false
-        for step = 1, MAX_STEP_HEIGHT do
+        for step = 1, MAX_STEP_HEIGHT or 8 do
             if not checkCollision(char, map, nextX, char.y - step) then
                 char.x, char.y = nextX, char.y - step
                 stepped = true
@@ -807,6 +816,7 @@ local function test_update(dt, char, map)
         end
         updateCamera(dt, char, mapWidth, mapHeight)
     end
+
     updateGamestate(dt, char)
 end
 
