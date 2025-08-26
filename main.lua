@@ -5,7 +5,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "knuck"
+local gamestate = "warning"
 
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
@@ -255,7 +255,7 @@ fire_bg.idle = loadFrames("images/background/fire/", 3)
 
 local sonic_demoexe_screen = createCharacter{x = 0, y = 355}
 sonic_demoexe_screen.idle = fast.getImage(spritesFolder .. "screen/idle.png")
-sonic_demoexe_screen.grab = loadFrames(spritesFolder .. "screen/grab", 5)
+sonic_demoexe_screen.grab = loadFrames(spritesFolder .. "screen/grab/", 5)
 
 local tail_tails = {
     x = 100,
@@ -582,6 +582,8 @@ tort_visible = false
 tort_visible2 = false
 tort_time = 0
 local soundPlayed = false
+local soundPlayed2 = false
+local soundplay3 = false
 
 function torture(dt)
     tort_time = tort_time + dt
@@ -599,6 +601,46 @@ function torture(dt)
         gamestate = "hs"
     end
 end
+
+cheat_time = 0
+cheating_vis = false
+cheating_vis2 = false
+cheating_alpha = 0
+cheating_alpha2 = 0.7
+--lights_off
+function cheating(dt)
+    cheat_time = cheat_time + dt
+
+    if cheat_time >= 5 and cheating_alpha < 0.36 then
+        cheating_alpha = math.min(0.36, cheating_alpha + 0.1 * dt)
+        cheating_vis = true
+        sonic_demoexe_screen.currentSprite = sonic_demoexe_screen.idle
+    end
+
+    if cheat_time >= 12 and not soundPlayed2 then
+        cheating_vis = false
+        cheating_vis2 = true
+        sounds.enterSound:play()
+        soundPlayed2 = true
+    end
+
+    if cheat_time >= 13 and cheating_alpha2 > 0 then
+        cheating_alpha2 = math.max(0, cheating_alpha2 - 0.1 * dt)
+    end
+
+    if cheat_time >= 20 then
+        cheating_vis2 = false
+        cheating_vis = true
+        updateSprite(dt * 1.2, sonic_demoexe_screen.grab, sonic_demoexe_screen)
+        if sonic_demoexe_screen.spriteIndex >= #sonic_demoexe_screen.grab then
+            sonic_demoexe_screen.spriteIndex = #sonic_demoexe_screen.grab
+            if cheat_time >= 25 then
+                gamestate = "william"
+            end
+        end
+    end
+end
+
 
 function getControls()
     local moveRight = love.keyboard.isDown("right") or joystick.dx > 0.2
@@ -1381,6 +1423,8 @@ function ring_anim(dt)
     end
 end
 
+local joystickCooldown = 0
+
 function love.update(dt)
     gameTime = gameTime + dt
     if ok and discord then
@@ -1441,6 +1485,8 @@ function love.update(dt)
     elseif gamestate == "william" then
         william_update(dt)
         love.mouse.setRelativeMode(true)
+    elseif gamestate == "cheating" then
+        cheating(dt)
     elseif gamestate == "warning" and love.keyboard.isDown("return") then
         startTransition("error")
     else
@@ -1448,7 +1494,7 @@ function love.update(dt)
     end
 
     if gamestate == "selection" then
-        if love.keyboard.isDown("return") then
+        if love.keyboard.isDown("return") or jumpButton.active then
             if selectionIndex == 1 and tails_lock then
                 startTransition("test")
             elseif selectionIndex == 2 and knuckles_lock then
@@ -1458,6 +1504,21 @@ function love.update(dt)
             end
         end
 
+        if joystickCooldown > 0 then
+            joystickCooldown = joystickCooldown - dt
+        end
+
+        if joystickCooldown <= 0 then
+            if joystick.dx > 0.5 then
+                selectionIndex = math.min(#selectionOptions, selectionIndex + 1)
+                sounds.reboot_old:play()
+                joystickCooldown = 0.25
+            elseif joystick.dx < -0.5 then
+                selectionIndex = math.max(1, selectionIndex - 1)
+                sounds.reboot_old:play()
+                joystickCooldown = 0.25
+            end
+        end
         zoomTimer = math.min(zoomTimer + dt, zoomDuration)
         local t = easeInOutCubic(zoomTimer / zoomDuration)
 
@@ -2191,6 +2252,17 @@ function love.draw()
     elseif gamestate == "warning" then
         love.graphics.printf("WARNING!\nThis game contains flash light and it might also be buggy as well, which will be fixed in the very next updates of the game.\n\nPress start to play.", 0, base_height/2 - 45, base_width, "center")
     elseif gamestate == "cheating" then
+        love.graphics.setColor(1, 1, 1, cheating_alpha)
+        if sonic_demoexe_screen.currentSprite and cheating_vis then
+            love.graphics.draw(sonic_demoexe_screen.currentSprite)
+        end
+
+        love.graphics.setColor(1, 1, 1, cheating_alpha2)
+        local t = love.timer.getTime()
+        if cheating_vis2 then
+            love.graphics.print("How dare you cheat.", 40, 50 + math.sin(t*2)*2)
+            love.graphics.print("You aren't going to escape your fate.", 75, 157 + math.sin(t*2)*2)
+        end
     end
 
     if transitionAlpha > 0 then
@@ -2260,10 +2332,10 @@ function updateCanvasScale()
     offset_x = (window_width - scaled_width) / 2
     offset_y = (window_height - scaled_height) / 2
 end
-
+link = "https://docs.google.com/document/d/1J0nOXnQMULgsqhbdnPfF3uHCHJ0wMvX1BC4TgXKVpX8"
 function love.keypressed(key)
     if gamestate == "doc" and key == "return" then
-        openURL("https://docs.google.com/document/d/1J0nOXnQMULgsqhbdnPfF3uHCHJ0wMvX1BC4TgXKVpX8")
+        openURL(link)
         love.event.quit()
     end
 end
@@ -2291,6 +2363,11 @@ function love.touchpressed(id, x, y)
         if sounds.laugh_sound then
             sounds.laugh_sound:play()
         end
+    end
+
+    if gamestate == "doc" then
+        openURL(link)
+        love.event.quit()
     end
 
     if gamestate == "warning" then
