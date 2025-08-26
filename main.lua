@@ -255,6 +255,7 @@ fire_bg.idle = loadFrames("images/background/fire/", 3)
 
 local sonic_demoexe_screen = createCharacter{x = 0, y = 355}
 sonic_demoexe_screen.idle = fast.getImage(spritesFolder .. "screen/idle.png")
+sonic_demoexe_screen.grab = loadFrames(spritesFolder .. "screen/grab", 5)
 
 local tail_tails = {
     x = 100,
