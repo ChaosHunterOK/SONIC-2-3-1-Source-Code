@@ -1519,9 +1519,10 @@ function love.update(dt)
                 joystickCooldown = 0.25
             end
         end
+
         zoomTimer = math.min(zoomTimer + dt, zoomDuration)
         local t = easeInOutCubic(zoomTimer / zoomDuration)
-
+        
         selectionScale = 3 + (1 - 3) * t
         selectionAlpha = 0 + (1 - 0) * t
 
@@ -1529,6 +1530,8 @@ function love.update(dt)
             selectionScale = 1
             selectionAlpha = 1
         end
+    else
+        joystickCooldown = 0
     end
 
     if gamestate == "credits" then
