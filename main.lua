@@ -5,7 +5,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "test"
+local gamestate = "cheating"
 
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
@@ -946,6 +946,7 @@ function knuck_up(dt)
             if bossfightTimer <= 0 then
                 bossfightTimer = 0
                 bossfightActive = false
+                gamestate = "selection"
                 sounds.bossMusic:stop()
             end
         end
