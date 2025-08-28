@@ -5,7 +5,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "testmap"
+local gamestate = "test"
 
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
@@ -118,24 +118,19 @@ selectionState = "tails"
 selectionIndex = 1
 selectionOptions = {"tails", "knuckles", "eggman"}
 
-local function loadMap(imagePath)
-    local img = fast.getImage(imagePath)
-    local imageData = love.image.newImageData(imagePath)
+function loadMap(path)
+    local img = love.graphics.newImage(path)
+    local imageData = love.image.newImageData(path)
     local w, h = imageData:getDimensions()
     local collision = {}
 
     imageData:mapPixel(function(x, y, r, g, b, a)
         collision[y] = collision[y] or {}
         collision[y][x] = a > 0.1
-        return r, g, b, a
+        return r,g,b,a
     end)
 
-    return {
-        image = img,
-        collision = collision,
-        width = w,
-        height = h
-    }
+    return {image=img, collision=collision, width=w, height=h}
 end
 
 map = loadMap("images/maps/test.png")
@@ -228,7 +223,7 @@ tails.walk = loadFrames(spritesFolder .. "tails/walking/", 8)
 tails.jump = loadFrames(spritesFolder .. "tails/jump/", 3)
 tails.run = loadFrames(spritesFolder .. "tails/run/", 2)
 
-local knuckles = createCharacter{ x = 100, y = 50, maxSpeed = 400 }
+local knuckles = createCharacter{ x = 100, y = 50, maxSpeed = 200 }
 knuckles.idle = fast.getImage(spritesFolder .. "knuckles/idle.png")
 knuckles.walk = loadFrames(spritesFolder .. "knuckles/walking/", 7)
 knuckles.run = loadFrames(spritesFolder .. "knuckles/run/", 4)
@@ -651,7 +646,6 @@ function cheating(dt)
     end
 end
 
-
 function getControls()
     local moveRight = love.keyboard.isDown("right") or joystick.dx > 0.2
     local moveLeft = love.keyboard.isDown("left")  or joystick.dx < -0.2
@@ -670,10 +664,7 @@ local crashMaxAlpha = 0.5
 local fadeDuration = 0.25
 
 local AIR_DRAG = 0.99609375
-local GROUND_DECEL = 0.125
-
-local MAX_STEP_HEIGHT = 14
-local SLOPE_SCAN_DIST = 10
+local MAX_STEP_HEIGHT = 10
 
 local function isSolidPixel(x, y, map)
     local tx, ty = math.floor(x), math.floor(y)
@@ -694,47 +685,28 @@ local function checkCollision(char, map, x, y)
     return false
 end
 
-local function getGroundY(char, map, x, baseY)
-    for i = 0, MAX_STEP_HEIGHT do
-        if checkCollision(char, map, x, baseY + i) then return baseY + i end
-        if baseY - i >= 0 and checkCollision(char, map, x, baseY - i) then return baseY - i end
+local function getGroundY(char, map, baseX, baseY)
+    local startY = math.floor(baseY + char.height / 2)
+    for y = startY, startY + MAX_STEP_HEIGHT do
+        if checkCollision(char, map, baseX, y - char.height / 2) then
+            return y - char.height / 2
+        end
     end
     return nil
 end
 
-local function getSlopeAngle(char, map)
-    local yLeft = getGroundY(char, map, char.x - SLOPE_SCAN_DIST, char.y) or char.y
-    local yRight = getGroundY(char, map, char.x + SLOPE_SCAN_DIST, char.y) or char.y
-    local dy = yRight - yLeft
-    local angle = math.atan2(dy, SLOPE_SCAN_DIST * 2)
-    return angle, dy
-end
-
-local function quantizeAngle(angle)
-    local deg = math.deg(angle)
-    if deg > 22.5 then deg = 45
-    elseif deg < -22.5 then deg = -45
-    else deg = 0 end
-    return math.rad(deg)
-end
-
-local function handleSlopes(char, map, dt)
-    if not char.grounded then return end
-    local nextX = char.x + char.velocity.x * dt
-    local yBelow = getGroundY(char, map, nextX, char.y)
-
-    if yBelow then
-        local dy = yBelow - char.y
-        if math.abs(dy) <= MAX_STEP_HEIGHT then
-            char.y = char.y + dy
-        else
-            char.velocity.x = 0
+local function snapToGround(char, map)
+    local groundY = getGroundY(char, map, char.x, char.y)
+    if groundY and math.abs(groundY - char.y) <= MAX_STEP_HEIGHT - 5 then
+        if char.velocity.y > 0 then
+            char.velocity.y = math.min(char.velocity.y, 60)
         end
-        local yLeft = getGroundY(char, map, char.x - SLOPE_SCAN_DIST, char.y) or char.y
-        local yRight = getGroundY(char, map, char.x + SLOPE_SCAN_DIST, char.y) or char.y
-        char.angle = quantizeAngle(math.atan2(yRight - yLeft, SLOPE_SCAN_DIST * 2))
+        char.y = groundY
+        char.grounded = true
+        return true
     else
         char.grounded = false
+        return false
     end
 end
 
@@ -765,27 +737,29 @@ function updateCamera(dt, char, mapWidth, mapHeight)
     camera.y = math.floor(targetY + 0.5)
 end
 
-local function test_update(dt, char, map)
+function test_update(dt, char, map)
     local mapWidth, mapHeight = map.width or 2000, map.height or 1080
+
     if not char.grounded then
-        char.velocity.y = char.velocity.y + gravity * dt
+        char.velocity.y = char.velocity.y + (gravity or 800) * dt
         char.velocity.x = char.velocity.x * AIR_DRAG
     end
 
     if tail_tails and tail_tails.idle then
-        updateSprite(dt*0.5, tail_tails.idle, tail_tails)
+        updateSprite(dt * 0.5, tail_tails.idle, tail_tails)
     end
 
     local moveRight, moveLeft, jump, lookUp, lookDown = getControls()
+    local inputDir = moveRight and 1 or moveLeft and -1 or 0
+
     if char ~= sonic_demoexe then
         if char.grounded and (lookUp or lookDown) then
             char.velocity.x = 0
             char.currentSprite = lookUp and (char.up or char.idle) or (char.down or char.idle)
             char.angle = 0
         elseif moveRight or moveLeft then
-            local dir = moveRight and 1 or -1
-            char.direction = dir
-            char.velocity.x = char.velocity.x + dir * (char.acceleration or 600) * dt
+            char.direction = moveRight and 1 or -1
+            char.velocity.x = char.velocity.x + (char.acceleration or 600) * inputDir * dt
             char.velocity.x = clamp(char.velocity.x, -(char.maxSpeed or 200), char.maxSpeed or 200)
         else
             char.velocity.x = char.velocity.x * (char.grounded and (1 - GROUND_FRICTION) or 0.98)
@@ -805,6 +779,7 @@ local function test_update(dt, char, map)
             char.grounded = false
             if sounds.jump_sound then sounds.jump_sound:play() end
         end
+
         if char.jumping then
             updateSprite(dt, char.jump, char)
         elseif math.abs(char.velocity.x) >= char.runThreshold then
@@ -816,11 +791,22 @@ local function test_update(dt, char, map)
         end
     end
 
-    local nextX = char.x + char.velocity.x * dt
-    local nextY = char.y + char.velocity.y * dt
+    local nextX, nextY = char.x + char.velocity.x * dt, char.y + char.velocity.y * dt
+    --[[if char.grounded then
+        char.velocity.y = 0
+        gravity = JUMP_GRAVITY
+    else
+        gravity = char.jumping and JUMP_GRAVITY or FALL_GRAVITY
+        char.velocity.y = char.velocity.y + gravity * dt
+    end]]
 
-    if char.grounded then handleSlopes(char, map, dt) end
-
+    if not char.jumping then
+        snapToGround(char, map)
+        char.velocity.y = char.velocity.y * 1
+        gravity = 287
+    else
+        gravity = 625
+    end
     if not checkCollision(char, map, nextX, char.y) then
         char.x = nextX
     else
@@ -834,6 +820,7 @@ local function test_update(dt, char, map)
         end
         if not stepped then char.velocity.x = 0 end
     end
+
     if not checkCollision(char, map, char.x, nextY) then
         char.y = nextY
         char.grounded = false
@@ -841,12 +828,12 @@ local function test_update(dt, char, map)
         if char.velocity.y > 0 then
             char.grounded = true
             char.jumping = false
-            --char.y = math.floor(char.y + 0.5)
+        elseif char.velocity.y < 0 then
+            char.velocity.y = 0
+            char.grounded = false
         end
-        char.velocity.y = 0
     end
-
-    char.x = clamp(char.x, 15, mapWidth-15)
+    char.x = clamp(char.x, 15, mapWidth - 15)
     if char ~= sonic_demoexe then
         if char.y >= mapHeight + 40 then love.event.quit() end
         updateCamera(dt, char, mapWidth, mapHeight)
@@ -880,6 +867,9 @@ local jumpTimer = 0
 local jumpInterval = 1
 
 sonic_demoexe.bounceCount = 0
+bossfightTimer = sounds.bossMusic:getDuration("seconds")
+bossfightTimer = 0
+bossfightActive = false
 
 local function handleBounce(knuck, demo, dt)
     local overlapX = math.abs(knuck.x - demo.x) < (knuck.width + demo.width) / 2
@@ -945,8 +935,22 @@ function knuck_up(dt)
     if knuckles.x > 5990 then
         waiting_knuck = waiting_knuck + dt
 
-        if waiting_knuck >= 2 then
+        if waiting_knuck >= 2 and not bossfightActive then
             sounds.bossMusic:play()
+            bossfightActive = true
+            bossfightTimer = sounds.bossMusic:getDuration("seconds")
+        end
+
+        if bossfightActive then
+            bossfightTimer = bossfightTimer - dt
+            if bossfightTimer <= 0 then
+                bossfightTimer = 0
+                bossfightActive = false
+                sounds.bossMusic:stop()
+            end
+        end
+
+        if bossfightActive then
             if sonic_demoexe.x > 6484 then
                 sonic_demoexe.direction = -1
             elseif sonic_demoexe.x < 5993 then
@@ -1007,6 +1011,7 @@ function knuck_up(dt)
                 sonic_demoexe.velocity.x = math.max(0, sonic_demoexe.velocity.x)
             end
         end
+
         test_update(dt, sonic_demoexe, map2)
     end
 end
@@ -1744,7 +1749,7 @@ local function char_draw(char, offsetX, offsetY)
             sprite,
             char.x + offsetX,
             char.y + offsetY,
-            char.angle,
+            char.fakeAngle,
             flipX,
             1,
             sprite:getWidth() / 2,
@@ -2180,6 +2185,16 @@ function love.draw()
             end
         end
         love.graphics.pop()
+
+        if bossfightActive then
+            local timerText = string.format("TIME LEFT: %.1f", bossfightTimer)
+            local timerWidth = love.graphics.getFont():getWidth(timerText)
+            love.graphics.setColor(0, 0, 0)
+            love.graphics.print(timerText, base_width - timerWidth - 17, 33)
+            love.graphics.setColor(1, 1, 0)
+            love.graphics.print(timerText, base_width - timerWidth - 20, 30)
+            love.graphics.setColor(1, 1, 1)
+        end
         drawStats()
         drawStageTitle(greenHillZoneTitle, hideAndSeekZoneCircles, stageActImg1)
         love.graphics.setColor(1, 1, 1)
@@ -2419,5 +2434,15 @@ function love.touchreleased(id, x, y)
 
     if not rightActive then
         jumpButton.active = false
+    end
+end
+
+function sign(x)
+    if x > 0 then
+        return 1
+    elseif x < 0 then
+        return -1
+    else
+        return 0
     end
 end
