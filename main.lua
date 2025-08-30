@@ -5,7 +5,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "cheating"
+local gamestate = "test"
 
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
@@ -647,11 +647,12 @@ function cheating(dt)
 end
 
 function getControls()
-    local moveRight = love.keyboard.isDown("right") or joystick.dx > 0.2
-    local moveLeft = love.keyboard.isDown("left")  or joystick.dx < -0.2
-    local jump = love.keyboard.isDown("space") or jumpButton.active
-    local lookUp = love.keyboard.isDown("up") or (joystick.dy < -0.25 and not jump)
-    local lookDown = love.keyboard.isDown("down") and not jump or (joystick.dy > 0.25 and not jump)
+    local moveRight = love.keyboard.isDown("right") or joystick.dx > 0.25
+    local moveLeft = love.keyboard.isDown("left")  or joystick.dx < -0.25
+    local jump = love.keyboard.isDown("space") or love.keyboard.isDown("a") or jumpButton.active
+
+    local lookUp = (love.keyboard.isDown("up") or joystick.dy < -0.35) and not jump and not moveRight and not moveLeft
+    local lookDown = (love.keyboard.isDown("down") or joystick.dy > 0.35) and not jump and not moveRight and not moveLeft
 
     return moveRight, moveLeft, jump, lookUp, lookDown
 end
@@ -755,7 +756,11 @@ function test_update(dt, char, map)
     if char ~= sonic_demoexe then
         if char.grounded and (lookUp or lookDown) then
             char.velocity.x = 0
-            char.currentSprite = lookUp and (char.up or char.idle) or (char.down or char.idle)
+            if lookUp then
+                char.currentSprite = char.up or char.idle
+            elseif lookDown then
+                char.currentSprite = char.down or char.idle
+            end
             char.angle = 0
         elseif moveRight or moveLeft then
             char.direction = moveRight and 1 or -1
@@ -774,6 +779,7 @@ function test_update(dt, char, map)
 
         if jump and char.grounded and not char.jumping then
             char.velocity.y = char.jumpHeight or -300
+            char.angle = 0
             updateSprite(dt, char.jump, char)
             char.jumping = true
             char.grounded = false
@@ -782,12 +788,22 @@ function test_update(dt, char, map)
 
         if char.jumping then
             updateSprite(dt, char.jump, char)
+        elseif char.grounded and lookUp and char.velocity.x == 0 then
+            char.currentSprite = char.up or char.idle
+        elseif char.grounded and lookDown and char.velocity.x == 0 then
+            char.currentSprite = char.down or char.idle
         elseif math.abs(char.velocity.x) >= char.runThreshold then
             updateSprite(dt, char.run, char)
         elseif math.abs(char.velocity.x) > 0 then
             updateSprite(dt * (math.abs(char.velocity.x)/175 + 0.3), char.walk, char)
         else
-            char.currentSprite = char.idle
+            if lookUp and char.velocity.x == 0  then
+                char.currentSprite = char.up or char.idle
+            elseif lookDown and char.velocity.x == 0 then
+                char.currentSprite = char.down or char.idle
+            else
+                char.currentSprite = char.idle
+            end
         end
     end
 
@@ -1422,6 +1438,7 @@ function ring_anim(dt)
 end
 
 local joystickCooldown = 0
+local selectionLocked = false  
 
 function love.update(dt)
     gameTime = gameTime + dt
@@ -1494,29 +1511,34 @@ function love.update(dt)
     end
 
     if gamestate == "selection" then
-        if love.keyboard.isDown("return") or jumpButton.active then
-            if selectionIndex == 1 and tails_lock then
-                startTransition("test")
-            elseif selectionIndex == 2 and knuckles_lock then
-                startTransition("knuck")
-            elseif selectionIndex == 3 and eggman_lock then
-                startTransition("eggman")
+        if not selectionLocked then
+            if love.keyboard.isDown("return") or jumpButton.active then
+                if selectionIndex == 1 and tails_lock then
+                    startTransition("test")
+                    selectionLocked = true
+                elseif selectionIndex == 2 and knuckles_lock then
+                    startTransition("knuck")
+                    selectionLocked = true
+                elseif selectionIndex == 3 and eggman_lock then
+                    startTransition("eggman")
+                    selectionLocked = true
+                end
             end
-        end
 
-        if joystickCooldown > 0 then
-            joystickCooldown = joystickCooldown - dt
-        end
+            if joystickCooldown > 0 then
+                joystickCooldown = joystickCooldown - dt
+            end
 
-        if joystickCooldown <= 0 then
-            if joystick.dx > 0.5 then
-                selectionIndex = math.min(#selectionOptions, selectionIndex + 1)
-                sounds.reboot_old:play()
-                joystickCooldown = 0.25
-            elseif joystick.dx < -0.5 then
-                selectionIndex = math.max(1, selectionIndex - 1)
-                sounds.reboot_old:play()
-                joystickCooldown = 0.25
+            if joystickCooldown <= 0 then
+                if joystick.dx > 0.5 then
+                    selectionIndex = math.min(#selectionOptions, selectionIndex + 1)
+                    sounds.reboot_old:play()
+                    joystickCooldown = 0.25
+                elseif joystick.dx < -0.5 then
+                    selectionIndex = math.max(1, selectionIndex - 1)
+                    sounds.reboot_old:play()
+                    joystickCooldown = 0.25
+                end
             end
         end
 
@@ -1530,8 +1552,10 @@ function love.update(dt)
             selectionScale = 1
             selectionAlpha = 1
         end
+        return
     else
         joystickCooldown = 0
+        selectionLocked = false
     end
 
     if gamestate == "credits" then
