@@ -686,11 +686,15 @@ local function checkCollision(char, map, x, y)
     return false
 end
 
-local function getGroundY(char, map, baseX, baseY)
+local function getGroundY(char, map, baseX, baseY, snap)
     local startY = math.floor(baseY + char.height / 2)
     for y = startY, startY + MAX_STEP_HEIGHT do
         if checkCollision(char, map, baseX, y - char.height / 2) then
-            return y - char.height / 2
+            local groundY = y - char.height / 2
+            if snap then
+                char.y = groundY
+            end
+            return groundY
         end
     end
     return nil
@@ -698,14 +702,26 @@ end
 
 local function snapToGround(char, map)
     local groundY = getGroundY(char, map, char.x, char.y)
+
     if groundY and math.abs(groundY - char.y) <= MAX_STEP_HEIGHT - 5 then
         if char.velocity.y > 0 then
             char.velocity.y = math.min(char.velocity.y, 60)
         end
+
         char.y = groundY
         char.grounded = true
         return true
     else
+        for step = 1, MAX_STEP_HEIGHT do
+            local tryY = char.y - step
+            if getGroundY(char, map, char.x, tryY) then
+                char.y = tryY
+                char.velocity.y = 0
+                char.grounded = true
+                return true
+            end
+        end
+
         char.grounded = false
         return false
     end
@@ -819,7 +835,7 @@ function test_update(dt, char, map)
     if not char.jumping then
         snapToGround(char, map)
         char.velocity.y = char.velocity.y * 1
-        gravity = 287
+        gravity = 400
     else
         gravity = 625
     end
@@ -923,6 +939,9 @@ local function handleBounce(knuck, demo, dt)
     end
 end
 
+blackScreen = false
+blackTimer = 0
+
 function knuck_up(dt)
     updateSprite(dt * 0.5, s1.stage2, s1)
 
@@ -962,8 +981,17 @@ function knuck_up(dt)
             if bossfightTimer <= 0 then
                 bossfightTimer = 0
                 bossfightActive = false
-                gamestate = "selection"
                 sounds.bossMusic:stop()
+                blackScreen = true
+                blackTimer = 3
+            end
+        end
+
+        if blackScreen then
+            blackTimer = blackTimer - dt
+            if blackTimer <= 0 then
+                blackScreen = false
+                gamestate = "selection"
             end
         end
 
@@ -1438,7 +1466,7 @@ function ring_anim(dt)
 end
 
 local joystickCooldown = 0
-local selectionLocked = false  
+local selectionLocked = false
 
 function love.update(dt)
     gameTime = gameTime + dt
@@ -2222,7 +2250,12 @@ function love.draw()
         end
         drawStats()
         drawStageTitle(greenHillZoneTitle, hideAndSeekZoneCircles, stageActImg1)
-        love.graphics.setColor(1, 1, 1)
+
+        if blackScreen then
+            love.graphics.setColor(0, 0, 0, 1)
+            love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+            love.graphics.setColor(1, 1, 1, 1)
+        end
     elseif gamestate == "eggman" then
         drawScrollingBG(menu, bgX1, bgX2, 0, 0)
         love.graphics.push()
