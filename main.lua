@@ -5,7 +5,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "test"
+local gamestate = "warning"
 
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
@@ -103,7 +103,8 @@ local soundDefs = {
     laugh_sound = "sounds/laugh.mp3",
     S3K_9A = "sounds/S3K_9A.wav",
     lights_off = "sounds/lights-sound-effect.mp3",
-    error_sound = "sounds/error_sound.mp3"
+    error_sound = "sounds/error_sound.mp3",
+    sonic_error_sound = "sounds/sonic_error_sound.mp3"
 }
 
 local sounds = {}
@@ -588,7 +589,6 @@ tort_visible2 = false
 tort_time = 0
 local soundPlayed = false
 local soundPlayed2 = false
-local soundplay3 = false
 
 function torture(dt)
     tort_time = tort_time + dt
@@ -636,7 +636,7 @@ function cheating(dt)
     if cheat_time >= 20 then
         cheating_vis2 = false
         cheating_vis = true
-        updateSprite(dt * 1.2, sonic_demoexe_screen.grab, sonic_demoexe_screen)
+        updateSprite(dt * 1.35, sonic_demoexe_screen.grab, sonic_demoexe_screen)
         if sonic_demoexe_screen.spriteIndex >= #sonic_demoexe_screen.grab then
             sonic_demoexe_screen.spriteIndex = #sonic_demoexe_screen.grab
             if cheat_time >= 25 then
@@ -664,13 +664,33 @@ local crashAlpha = 0
 local crashMaxAlpha = 0.5
 local fadeDuration = 0.25
 
-local AIR_DRAG = 0.99609375
-local MAX_STEP_HEIGHT = 10
+TOP_SPEED = 220
+GROUND_ACCEL= 780
+GROUND_DECEL = 1500
+GROUND_FRICTION = 1300
+AIR_ACCEL = 420
+AIR_DECEL = 360
+GRAVITY_NORMAL = 1000
+GRAVITY_JUMP_HOLD = 600
+GRAVITY_FASTFALL = 1400
+JUMP_VELOCITY = -310
+JUMP_HOLD_TIME = 0.18
+COYOTE_TIME = 0.10
+JUMP_BUFFER = 0.10
+AIR_DRAG = 0.99609375
+MAX_STEP_HEIGHT = 10
 
 local function isSolidPixel(x, y, map)
     local tx, ty = math.floor(x), math.floor(y)
     if tx < 0 or ty < 0 or tx >= map.width or ty >= map.height then return false end
     return map.collision[ty] and map.collision[ty][tx] or false
+end
+
+local function approach(v, target, amt)
+    if v < target then return math.min(v + amt, target)
+    elseif v > target then return math.max(v - amt, target)
+    end
+    return v
 end
 
 local function checkCollision(char, map, x, y)
@@ -686,42 +706,32 @@ local function checkCollision(char, map, x, y)
     return false
 end
 
-local function getGroundY(char, map, baseX, baseY, snap)
+local function getGroundY(char, map, baseX, baseY)
     local startY = math.floor(baseY + char.height / 2)
     for y = startY, startY + MAX_STEP_HEIGHT do
         if checkCollision(char, map, baseX, y - char.height / 2) then
-            local groundY = y - char.height / 2
-            if snap then
-                char.y = groundY
-            end
-            return groundY
+            return y - char.height / 2
         end
     end
     return nil
 end
 
-local function snapToGround(char, map)
+local function snapToGround(char, map, dt)
+    if char.jumping then
+        char.grounded = false
+        return false
+    end
+
     local groundY = getGroundY(char, map, char.x, char.y)
-
-    if groundY and math.abs(groundY - char.y) <= MAX_STEP_HEIGHT - 5 then
-        if char.velocity.y > 0 then
-            char.velocity.y = math.min(char.velocity.y, 60)
+    if groundY then
+        local targetY = groundY
+        char.y = approach(char.y, targetY, 300 * dt)
+        char.grounded = math.abs(char.y - groundY) < 1
+        if char.grounded and char.velocity.y > 0 then
+            char.velocity.y = 0
         end
-
-        char.y = groundY
-        char.grounded = true
         return true
     else
-        for step = 1, MAX_STEP_HEIGHT do
-            local tryY = char.y - step
-            if getGroundY(char, map, char.x, tryY) then
-                char.y = tryY
-                char.velocity.y = 0
-                char.grounded = true
-                return true
-            end
-        end
-
         char.grounded = false
         return false
     end
@@ -756,66 +766,88 @@ end
 
 function test_update(dt, char, map)
     local mapWidth, mapHeight = map.width or 2000, map.height or 1080
+    char.velocity = char.velocity or {x = 0, y = 0}
+    char.jumping = char.jumping or false
+    char.grounded = char.grounded or false
+    char._coyote = char._coyote or 0
+    char._jumpBuf = char._jumpBuf or 0
 
-    if not char.grounded then
-        char.velocity.y = char.velocity.y + (gravity or 800) * dt
-        char.velocity.x = char.velocity.x * AIR_DRAG
-    end
-
-    if tail_tails and tail_tails.idle then
-        updateSprite(dt * 0.5, tail_tails.idle, tail_tails)
-    end
+    local vx, vy = char.velocity.x, char.velocity.y
 
     local moveRight, moveLeft, jump, lookUp, lookDown = getControls()
     local inputDir = moveRight and 1 or moveLeft and -1 or 0
 
+    if tail_tails and tail_tails.idle then
+        updateSprite(dt * 0.5, tail_tails.idle, tail_tails)
+    end
+    snapToGround(char, map, dt)
+    local grounded = char.grounded
+
+    if grounded then
+        char._coyote = COYOTE_TIME
+    else
+        char._coyote = math.max(0, char._coyote - dt)
+    end
+
+    if jump then
+        char._jumpBuf = JUMP_BUFFER
+    else
+        char._jumpBuf = math.max(0, char._jumpBuf - dt)
+    end
+
     if char ~= sonic_demoexe then
-        if char.grounded and (lookUp or lookDown) then
-            char.velocity.x = 0
-            if lookUp then
-                char.currentSprite = char.up or char.idle
-            elseif lookDown then
-                char.currentSprite = char.down or char.idle
+        if grounded and (lookUp or lookDown) then
+            vx = 0
+            if lookUp then char.currentSprite = char.up or char.idle
+            elseif lookDown then char.currentSprite = char.down or char.idle
             end
             char.angle = 0
+
         elseif moveRight or moveLeft then
             char.direction = moveRight and 1 or -1
-            char.velocity.x = char.velocity.x + (char.acceleration or 600) * inputDir * dt
-            char.velocity.x = clamp(char.velocity.x, -(char.maxSpeed or 200), char.maxSpeed or 200)
+            local accel = char.acceleration or 600
+            local maxS = char.maxSpeed or 200
+            vx = vx + accel * inputDir * dt
+            vx = clamp(vx, -maxS, maxS)
+
         else
-            char.velocity.x = char.velocity.x * (char.grounded and (1 - GROUND_FRICTION) or 0.98)
-            if math.abs(char.velocity.x) <= 0.1 then
-                char.velocity.x = 0
-                if not char.jumping then
-                    char.currentSprite = char.idle
-                    char.angle = 0
-                end
+            if grounded then
+                vx = vx * (1 - GROUND_FRICTION)
+                if math.abs(vx) < 0.1 then vx = 0 end
+            else
+                vx = vx * AIR_DRAG
+            end
+
+            if math.abs(vx) == 0 and not char.jumping then
+                char.currentSprite = char.idle
+                char.angle = 0
             end
         end
-
-        if jump and char.grounded and not char.jumping then
-            char.velocity.y = char.jumpHeight or -300
+        if jump and grounded then
+            vy = char.jumpHeight or -300
             char.angle = 0
-            updateSprite(dt, char.jump, char)
+            if char.jump then updateSprite(dt, char.jump, char) end
             char.jumping = true
             char.grounded = false
-            if sounds.jump_sound then sounds.jump_sound:play() end
+            if sounds and sounds.jump_sound then sounds.jump_sound:play() end
         end
 
+        local absVx = math.abs(vx)
         if char.jumping then
-            updateSprite(dt, char.jump, char)
-        elseif char.grounded and lookUp and char.velocity.x == 0 then
+            if char.jump then updateSprite(dt, char.jump, char) end
+        elseif char.grounded and lookUp and vx == 0 then
             char.currentSprite = char.up or char.idle
-        elseif char.grounded and lookDown and char.velocity.x == 0 then
+        elseif char.grounded and lookDown and vx == 0 then
             char.currentSprite = char.down or char.idle
-        elseif math.abs(char.velocity.x) >= char.runThreshold then
-            updateSprite(dt, char.run, char)
-        elseif math.abs(char.velocity.x) > 0 then
-            updateSprite(dt * (math.abs(char.velocity.x)/175 + 0.3), char.walk, char)
+        elseif absVx >= (char.runThreshold or 175) then
+            if char.run then updateSprite(dt, char.run, char) end
+        elseif absVx > 0 then
+            local speedScale = (absVx / (char.maxSpeed or 200)) + 0.3
+            if char.walk then updateSprite(dt * speedScale, char.walk, char) end
         else
-            if lookUp and char.velocity.x == 0  then
+            if lookUp and vx == 0 then
                 char.currentSprite = char.up or char.idle
-            elseif lookDown and char.velocity.x == 0 then
+            elseif lookDown and vx == 0 then
                 char.currentSprite = char.down or char.idle
             else
                 char.currentSprite = char.idle
@@ -823,22 +855,27 @@ function test_update(dt, char, map)
         end
     end
 
-    local nextX, nextY = char.x + char.velocity.x * dt, char.y + char.velocity.y * dt
-    --[[if char.grounded then
-        char.velocity.y = 0
-        gravity = JUMP_GRAVITY
-    else
-        gravity = char.jumping and JUMP_GRAVITY or FALL_GRAVITY
-        char.velocity.y = char.velocity.y + gravity * dt
-    end]]
-
     if not char.jumping then
-        snapToGround(char, map)
-        char.velocity.y = char.velocity.y * 1
         gravity = 400
     else
         gravity = 625
     end
+
+    if (char._jumpBuf > 0 and char._coyote > 0 and not char.jumping) then
+        vy = char.jumpHeight or -300
+        char.jumping = true
+        char.grounded = false
+        char._jumpBuf = 0
+        if char.jump then updateSprite(dt, char.jump, char) end
+        if sounds and sounds.jump_sound then sounds.jump_sound:play() end
+    end
+
+    if not char.grounded then
+        vy = vy + (char.jumping and 625 or 400) * dt
+        vx = vx * AIR_DRAG
+    end
+
+    local nextX, nextY = char.x + vx * dt, char.y + vy * dt
     if not checkCollision(char, map, nextX, char.y) then
         char.x = nextX
     else
@@ -850,27 +887,31 @@ function test_update(dt, char, map)
                 break
             end
         end
-        if not stepped then char.velocity.x = 0 end
+        if not stepped then vx = 0 end
     end
 
     if not checkCollision(char, map, char.x, nextY) then
         char.y = nextY
         char.grounded = false
     else
-        if char.velocity.y > 0 then
+        if vy > 0 then
             char.grounded = true
             char.jumping = false
-        elseif char.velocity.y < 0 then
-            char.velocity.y = 0
+            vy = 0
+            snapToGround(char, map, dt)
+        elseif vy < 0 then
             char.grounded = false
+            vy = 0
+            char.y = char.y + 1
         end
     end
+
     char.x = clamp(char.x, 15, mapWidth - 15)
     if char ~= sonic_demoexe then
         if char.y >= mapHeight + 40 then love.event.quit() end
         updateCamera(dt, char, mapWidth, mapHeight)
     end
-
+    char.velocity.x, char.velocity.y = vx, vy
     updateGamestate(dt, char)
 end
 
@@ -1294,7 +1335,7 @@ animHandlers.black_screen = function(dt)
         splash_done = false
     end
 end
-local animTime = 1
+local animTime = 0.5
 local timer = 0
 local pressTextAnimTime = 2.2
 local pressTextTimer = 0
@@ -1467,6 +1508,19 @@ end
 
 local joystickCooldown = 0
 local selectionLocked = false
+local returnPressed = false
+errorSoundPlayed = false
+
+local function updateScrollingBG(dt)
+    if animation_phase == "initial" then return end
+
+    local width = menu:getWidth()
+    bgX1 = bgX1 + scroll_speed * dt
+    bgX2 = bgX2 + scroll_speed * dt
+
+    if bgX1 >= width then bgX1 = bgX2 - width end
+    if bgX2 >= width then bgX2 = bgX1 - width end
+end
 
 function love.update(dt)
     gameTime = gameTime + dt
@@ -1540,17 +1594,22 @@ function love.update(dt)
 
     if gamestate == "selection" then
         if not selectionLocked then
-            if love.keyboard.isDown("return") or jumpButton.active then
-                if selectionIndex == 1 and tails_lock then
-                    startTransition("test")
-                    selectionLocked = true
-                elseif selectionIndex == 2 and knuckles_lock then
-                    startTransition("knuck")
-                    selectionLocked = true
-                elseif selectionIndex == 3 and eggman_lock then
-                    startTransition("eggman")
-                    selectionLocked = true
+            if love.keyboard.isDown("return") then
+                if not returnPressed then
+                    returnPressed = true
+                    if selectionIndex == 1 and tails_lock then
+                        startTransition("test")
+                        selectionLocked = true
+                    elseif selectionIndex == 2 and knuckles_lock then
+                        startTransition("knuck")
+                        selectionLocked = true
+                    elseif selectionIndex == 3 and eggman_lock then
+                        startTransition("eggman")
+                        selectionLocked = true
+                    end
                 end
+            else
+                returnPressed = false
             end
 
             if joystickCooldown > 0 then
@@ -1580,10 +1639,11 @@ function love.update(dt)
             selectionScale = 1
             selectionAlpha = 1
         end
-        return
+        --return
     else
         joystickCooldown = 0
         selectionLocked = false
+        returnPressed = false
     end
 
     if gamestate == "credits" then
@@ -1601,34 +1661,32 @@ function love.update(dt)
 
     menuscreen_update(dt)
     updateStageTitle(dt)
-    if animation_phase ~= "initial" then
-        bgX1 = bgX1 + scroll_speed * dt
-        bgX2 = bgX2 + scroll_speed * dt
-    
-        if bgX1 >= menu:getWidth() then
-            bgX1 = bgX2 - menu:getWidth()
-        end
-    
-        if bgX2 >= menu:getWidth() then
-            bgX2 = bgX1 - menu:getWidth()
-        end
-    end
+    updateScrollingBG(dt)
+
     if gamestate == "error" then
         elapsedTime4 = (elapsedTime4 or 0) + dt
+        reboot_vis2 = elapsedTime4 >= 2 and elapsedTime4 < 6
+        reboot_vis = elapsedTime4 >= 7
 
-        if elapsedTime4 >= 7 then
-            reboot_vis = true
-        elseif elapsedTime4 >= 2 then
-            reboot_vis2 = true
+        if reboot_vis2 and not errorSoundPlayed then
+            sounds.sonic_error_sound:play()
+            errorSoundPlayed = true
         end
 
         if reboot_vis and not rebootDone then
-            if not stageComplete then
-                stageProgress = math.min(100, stageProgress + dt * 50)
+            stageIncrementTimer = stageIncrementTimer or 0
 
-                if stageProgress >= 100 then
-                    stageComplete = true
-                    stageDelay = 0
+            if not stageComplete then
+                stageIncrementTimer = stageIncrementTimer + dt
+                if stageIncrementTimer >= 0.5 then
+                    stageIncrementTimer = stageIncrementTimer - 0.5
+                    stageProgress = math.min(100, stageProgress + 10)
+                    sounds.reboot_old:play()
+
+                    if stageProgress >= 100 then
+                        stageComplete = true
+                        stageDelay = 0
+                    end
                 end
             else
                 stageDelay = stageDelay + dt
@@ -2253,7 +2311,7 @@ function love.draw()
 
         if blackScreen then
             love.graphics.setColor(0, 0, 0, 1)
-            love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+            love.graphics.rectangle("fill", 0, 0, base_width, base_height)
             love.graphics.setColor(1, 1, 1, 1)
         end
     elseif gamestate == "eggman" then
@@ -2301,11 +2359,12 @@ function love.draw()
         elseif rebootDone then
             love.graphics.setColor(0, 0, 0, fadeBlack)
             love.graphics.rectangle("fill", 0, 0, base_width, base_height)
+            local t = love.timer.getTime()
             if fadeBlack >= 1 then
                 love.graphics.setFont(FontBig)
                 love.graphics.setColor(0.045, 0.045, 0.045, helloFade)
                 local text = "HELLO WILLIAM."
-                love.graphics.print(text, base_width/2 - FontBig:getWidth(text)/2, base_height/2 - FontBig:getHeight()/2)
+                love.graphics.print(text, base_width/2 - FontBig:getWidth(text)/2, base_height/2 - FontBig:getHeight()/2 + math.sin(t*2.2)*3)
             end
         elseif reboot_vis2 then
             love.graphics.setFont(FontBig)
