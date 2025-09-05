@@ -5,7 +5,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "warning"
+local gamestate = "menuscreen"
 
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
@@ -2149,6 +2149,8 @@ function mobile_stuff_draw()
     )
 end
 
+local transitionCanvas = love.graphics.newCanvas(base_width, base_height)
+
 function love.draw()
     love.graphics.setFont(Font)
     love.graphics.setCanvas(canvas)love.graphics.setColor(0, 0, 0)
@@ -2402,8 +2404,7 @@ function love.draw()
     end
 
     if transitionAlpha > 0 then
-        love.graphics.setColor(0, 0, 0, transitionAlpha)
-        love.graphics.rectangle("fill", 0, 0, base_width * 2, base_height * 2)
+        drawTransition(transitionAlpha)
     end
     if isFlashing then
         love.graphics.setColor(1, 1, 1, flashAlpha)
@@ -2416,6 +2417,32 @@ function love.draw()
     end
     love.graphics.setCanvas()
     love.graphics.draw(canvas, offset_x, offset_y, 0, scale_factor, scale_factor)
+end
+
+function quantizeColor(r, g, b, levels)
+    levels = levels or 4
+    local step = 1 / (levels - 1)
+    local qr = math.floor(r / step + 0.5) * step
+    local qg = math.floor(g / step + 0.5) * step
+    local qb = math.floor(b / step + 0.5) * step
+    return qr, qg, qb
+end
+
+function drawTransition(alpha)
+    local levels = 4
+    transitionCanvas:renderTo(function()
+        love.graphics.clear()
+        love.graphics.setColor(1,1,1)
+        love.graphics.draw(canvas)
+    end)
+
+    love.graphics.setColor(quantizeColor(0.3, 0.3, 1, levels))
+    love.graphics.setBlendMode("multiply", "premultiplied")
+    love.graphics.draw(transitionCanvas)
+    love.graphics.setBlendMode("alpha")
+    love.graphics.setColor(0, 0, 0, alpha)
+    love.graphics.rectangle("fill", 0, 0, base_width, base_height)
+    love.graphics.setColor(1,1,1,1)
 end
 
 function drawStats()
