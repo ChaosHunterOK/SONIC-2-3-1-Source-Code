@@ -5,7 +5,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "menuscreen"
+local gamestate = "eggman"
 
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
@@ -259,7 +259,7 @@ local fire_bg = createCharacter{}
 fire_bg.idle = loadFrames("images/background/fire/", 3)
 
 local sonic_demoexe_screen = createCharacter{x = 0, y = 355}
-sonic_demoexe_screen.idle = fast.getImage(spritesFolder .. "screen/idle.png")
+sonic_demoexe_screen.idle = fast.getImage(spritesFolder .. "screen/idle_new.png")
 sonic_demoexe_screen.grab = loadFrames(spritesFolder .. "screen/grab/", 5)
 
 local tail_tails = {
@@ -1426,11 +1426,17 @@ end
 function drawStageAct(img, x, y)
     love.graphics.draw(img, x, y)
 end
+local greenHillZoneTitle = fast.getImage("images/zone/titles/zone.png")
+greenHillZoneTitle_2 = fast.getImage("images/zone/titles/g_hill.png")
+local udZoneTitle = fast.getImage("images/zone/titles/u_d.png")
+local hideAndSeekZoneTitle = fast.getImage("images/zone/titles/h&s.png")
+local DotTitle = fast.getImage("images/zone/titles/dot.png")
+labTitle = fast.getImage("images/zone/titles/us.png")
 function drawTitleCard(stageNameImg, circleImg, actImg, baseX, baseY)
     drawStageCircle(circleImg, baseX + 10, baseY)
     drawStageName(stageNameImg, -baseX + 225, baseY)
-    love.graphics.draw(stageActImg, baseX + stageNameImg:getWidth() - 25, baseY + circleImg:getHeight() - 4)
-    drawStageAct(actImg, baseX + stageNameImg:getWidth() + 10, baseY + circleImg:getHeight() - 20)
+    love.graphics.draw(stageActImg, baseX + greenHillZoneTitle:getWidth() - 25, baseY + circleImg:getHeight() - 4)
+    drawStageAct(actImg, baseX + greenHillZoneTitle:getWidth() + 10, baseY + circleImg:getHeight() - 20)
 end
 
 stageTitleTimer = 0
@@ -1560,6 +1566,7 @@ function love.update(dt)
         else
             sonic_demoexe.currentSprite = sonic_demoexe.fly[1]
             eggman.currentSprite = eggman.idle
+            ringAnimState = false
         end
 
         if crashing then
@@ -1875,14 +1882,6 @@ local function drawScrollingBG(image, x1, x2, offsetX, offsetY)
 end
 
 DEMO_MenuScreen = fast.getImage(spritesFolder.."menuscreen/splash/6.png")
-
-local greenHillZoneTitle = fast.getImage("images/zone/titles/zone.png")
-greenHillZoneTitle_2 = fast.getImage("images/zone/titles/g_hill.png")
-local udZoneTitle = fast.getImage("images/zone/titles/u_d.png")
-local hideAndSeekZoneTitle = fast.getImage("images/zone/titles/h&s.png")
-local DotTitle = fast.getImage("images/zone/titles/dot.png")
-labTitle = fast.getImage("images/zone/titles/us.png")
-
 greenHillZoneCircles = fast.getImage("images/zone/circles/g_hill.png")
 greenHillZoneCircles_2 = fast.getImage("images/zone/circles/g_hill_2.png")
 local udZoneCircles = fast.getImage("images/zone/circles/u_d.png")
