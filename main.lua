@@ -1,14 +1,13 @@
 local love = require("love")
 local fast = require("fast")
+local ok, discord = pcall(require, "ffi/discord")
+local startTime = os.time()
 love.graphics.setDefaultFilter("nearest", "nearest")
 
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
 local gamestate = "eggman"
-
-local ok, discord = pcall(require, "ffi/discord")
-local startTime = os.time()
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -510,9 +509,11 @@ local function inRenderDistance(tile)
 end
 
 function love.mousemoved(x, y, dx, dy)
-    targetYaw = targetYaw - dx * mouseSensitivity
-    targetPitch = math.max(-math.pi/2, math.min(math.pi/2, targetPitch + dy * mouseSensitivity))
-    targetRoll = math.max(-0.15, math.min(0.15, -dx * rollStrength))
+    if not isMobile and gamestate == "william" then
+        targetYaw = targetYaw - dx * mouseSensitivity
+        targetPitch = math.max(-math.pi/2, math.min(math.pi/2, targetPitch + dy * mouseSensitivity))
+        targetRoll = math.max(-0.15, math.min(0.15, -dx * rollStrength))
+    end
 end
 
 local function easeInOutCubic(t)
@@ -1142,7 +1143,7 @@ function eggman_up(dt)
         if not crashing and dx < triggerDistance and dy < triggerDistance then
             crashing = true
             crashTimer = 0
-            love.window.setTitle("SONIC 2 3 1 (Not responding.)")
+            love.window.setTitle("SONIC 2 3 1 (Not responding)")
             if not error_sound_played then
                 sounds.error_sound:play()
                 error_sound_played = true
@@ -1580,7 +1581,7 @@ function love.update(dt)
 
             if crashTimer >= crashDuration then
                 gamestate = "cheating"
-                love.window.setTitle("SONIC 2 3 1")
+                love.window.setTitle("")
                 crashing = false
                 crashTimer = 0
                 crashAlpha = 0
@@ -2325,7 +2326,7 @@ function love.draw()
         char_draw(eggman, 0, -8)
         love.graphics.pop()
         drawStats()
-        drawStageTitle(greenHillZoneTitle, hideAndSeekZoneCircles, stageActImg1)
+        drawStageTitle(greenHillZoneTitle, labCircles, stageActImg1)
 
         if crashing then
             love.graphics.setColor(1, 1, 1, crashAlpha)
@@ -2502,6 +2503,9 @@ function love.keypressed(key)
     end
 end
 
+local cameraTouchID = nil
+local lastTouchX, lastTouchY = nil, nil
+
 function love.touchpressed(id, x, y)
     if not isMobile then return end
 
@@ -2514,6 +2518,13 @@ function love.touchpressed(id, x, y)
         joystick.active = true
         joystick.dx = (x - joystick.x) / joystick.radius
         joystick.dy = (y - joystick.y) / joystick.radius
+    else
+        if not cameraTouchID and gamestate == "william" then
+            cameraTouchID = id
+            lastTouchX, lastTouchY = x, y
+        else
+            jumpButton.active = true
+        end
     end
 
     if x > base_width / 2 then
@@ -2557,6 +2568,14 @@ function love.touchmoved(id, x, y)
         joystick.dx = dx / joystick.radius
         joystick.dy = dy / joystick.radius
     end
+    if id == cameraTouchID and gamestate == "william" then
+        local dx = x - lastTouchX
+        local dy = y - lastTouchY
+        targetYaw = targetYaw - dx * mouseSensitivity
+        targetPitch = math.max(-math.pi/2, math.min(math.pi/2, targetPitch + dy * mouseSensitivity))
+        targetRoll = math.max(-0.15, math.min(0.15, -dx * rollStrength))
+        lastTouchX, lastTouchY = x, y
+    end
 end
 
 function love.touchreleased(id, x, y)
@@ -2575,6 +2594,9 @@ function love.touchreleased(id, x, y)
         joystick.dy = 0
     end
 
+    if id == cameraTouchID and gamestate == "william" then
+        cameraTouchID = nil
+    end
     if not rightActive then
         jumpButton.active = false
     end
