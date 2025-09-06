@@ -456,8 +456,8 @@ function william_update(dt)
     local inputX, inputZ = 0, 0
     if love.keyboard.isDown("w") or joystick.dy < -0.2 then inputZ = inputZ + 1 end
     if love.keyboard.isDown("s") or joystick.dy > 0.2 then inputZ = inputZ - 1 end
-    if love.keyboard.isDown("a") or joystick.dx > 0.2 then inputX = inputX - 1 end
-    if love.keyboard.isDown("d") or joystick.dx < -0.2 then inputX = inputX + 1 end
+    if love.keyboard.isDown("a") or joystick.dx > -0.2 then inputX = inputX - 1 end
+    if love.keyboard.isDown("d") or joystick.dx < 0.2 then inputX = inputX + 1 end
     local len = inputX*inputX + inputZ*inputZ
     if len > 0 then
         len = 1 / math.sqrt(len)
@@ -509,7 +509,7 @@ local function inRenderDistance(tile)
 end
 
 function love.mousemoved(x, y, dx, dy)
-    if not isMobile and gamestate == "william" then
+    if gamestate == "william" then
         targetYaw = targetYaw - dx * mouseSensitivity
         targetPitch = math.max(-math.pi/2, math.min(math.pi/2, targetPitch + dy * mouseSensitivity))
         targetRoll = math.max(-0.15, math.min(0.15, -dx * rollStrength))
@@ -2504,6 +2504,7 @@ function love.keypressed(key)
 end
 
 local cameraTouchID = nil
+local joystickTouchID = nil
 local lastTouchX, lastTouchY = nil, nil
 
 function love.touchpressed(id, x, y)
@@ -2515,9 +2516,12 @@ function love.touchpressed(id, x, y)
     touches[id] = {x=x, y=y}
 
     if x <= base_width / 2 then
-        joystick.active = true
-        joystick.dx = (x - joystick.x) / joystick.radius
-        joystick.dy = (y - joystick.y) / joystick.radius
+        if not joystickTouchID then
+            joystickTouchID = id
+            joystick.active = true
+            joystick.dx = (x - joystick.x) / joystick.radius
+            joystick.dy = (y - joystick.y) / joystick.radius
+        end
     else
         if not cameraTouchID and gamestate == "william" then
             cameraTouchID = id
@@ -2583,19 +2587,22 @@ function love.touchreleased(id, x, y)
     touches[id] = nil
 
     local leftActive, rightActive = false, false
-    for _, t in pairs(touches) do
+    --[[for _, t in pairs(touches) do
         if t.x <= base_width / 2 then leftActive = true end
         if t.x > base_width / 2 then rightActive = true end
-    end
+    end]]
 
-    if not leftActive then
+    if id == joystickTouchID then
+        joystickTouchID = nil
         joystick.active = false
-        joystick.dx = 0
-        joystick.dy = 0
+        joystick.dx, joystick.dy = 0, 0
     end
 
     if id == cameraTouchID and gamestate == "william" then
         cameraTouchID = nil
+    end
+    for _, t in pairs(touches) do
+        if t.x > base_width / 2 then rightActive = true break end
     end
     if not rightActive then
         jumpButton.active = false
