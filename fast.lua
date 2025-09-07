@@ -11,7 +11,8 @@ local fast = {
     vsync = true,
     fpsCap = 0,
     _lastTime = lt.getTime(),
-    _soundPool = {}
+    _soundPool = {},
+    _polyBuffer = {}
 }
 
 local images = fast.cache.images
@@ -74,9 +75,41 @@ function fast.hexColor(hex, a)
     return r,g,b,a or 1
 end
 
+function fast.drawPolygon(verts, color, alpha, mode)
+    local pts = fast._polyBuffer
+    local k = 1
+    for i = 1, #verts do
+        local v = verts[i]
+        pts[k], pts[k+1] = v[1], v[2]
+        k = k + 2
+    end
+
+    if color then
+        lg.setColor(color[1], color[2], color[3], (color[4] or 1) * (alpha or 1))
+    else
+        lg.setColor(1, 1, 1, alpha or 1)
+    end
+    lg.polygon(mode or "fill", unpack(pts, 1, k-1))
+end
+
 --fast.draw is kinda useless, might get updated soon, will get to that later
 function fast.draw(obj, x, y, r, sx, sy, ox, oy, kx, ky)
-    lg.draw(obj, x or 0, y or 0, r or 0, sx or 1, sy or sx or 1, ox or 0, oy or 0, kx or 0, ky or 0)
+    if not r and not sx and not sy and not ox and not oy and not kx and not ky then
+        lg.draw(obj, x or 0, y or 0)
+        return
+    end
+    lg.draw(
+        obj,
+        x or 0,
+        y or 0,
+        r or 0,
+        sx or 1,
+        sy or (sx or 1),
+        ox or 0,
+        oy or 0,
+        kx or 0,
+        ky or 0
+    )
 end
 
 function fast.limitFPS()

@@ -7,7 +7,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "eggman"
+local gamestate = "testmap"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -681,20 +681,20 @@ JUMP_BUFFER = 0.10
 AIR_DRAG = 0.99609375
 MAX_STEP_HEIGHT = 10
 
-local function isSolidPixel(x, y, map)
+function isSolidPixel(x, y, map)
     local tx, ty = math.floor(x), math.floor(y)
     if tx < 0 or ty < 0 or tx >= map.width or ty >= map.height then return false end
     return map.collision[ty] and map.collision[ty][tx] or false
 end
 
-local function approach(v, target, amt)
+function approach(v, target, amt)
     if v < target then return math.min(v + amt, target)
     elseif v > target then return math.max(v - amt, target)
     end
     return v
 end
 
-local function checkCollision(char, map, x, y)
+function checkCollision(char, map, x, y)
     local left = math.floor(x - char.width/2)
     local right = math.floor(x + char.width/2 - 1)
     local top = math.floor(y - char.height/2)
@@ -707,7 +707,7 @@ local function checkCollision(char, map, x, y)
     return false
 end
 
-local function getGroundY(char, map, baseX, baseY)
+function getGroundY(char, map, baseX, baseY)
     local startY = math.floor(baseY + char.height / 2)
     for y = startY, startY + MAX_STEP_HEIGHT do
         if checkCollision(char, map, baseX, y - char.height / 2) then
@@ -717,7 +717,7 @@ local function getGroundY(char, map, baseX, baseY)
     return nil
 end
 
-local function snapToGround(char, map, dt)
+function snapToGround(char, map, dt)
     if char.jumping then
         char.grounded = false
         return false
@@ -736,6 +736,34 @@ local function snapToGround(char, map, dt)
         char.grounded = false
         return false
     end
+end
+
+function getVelocityAngle(vx, vy)
+    if vx == 0 and vy == 0 then
+        return nil
+    end
+    return math.deg(math.atan2(vy, vx)) % 360
+end
+
+function snapAngle(angle, step)
+    if not angle then return 0 end
+    local snapped = math.floor((angle + step / 2) / step) * step
+    return snapped % 360
+end
+
+function getGroundSlope(char, map)
+    local leftY = getGroundY(char, map, char.x - char.width/2, char.y)
+    local rightY = getGroundY(char, map, char.x + char.width/2, char.y)
+
+    if not leftY or not rightY then return 0 end
+
+    local dy = rightY - leftY
+    local dx = char.width
+    if dy == 0 then
+        return 0
+    end
+    local angle = math.deg(math.atan2(dy, dx))
+    return snapAngle(angle, 45)
 end
 
 GROUND_FRICTION = 0.125
@@ -796,6 +824,14 @@ function test_update(dt, char, map)
         char._jumpBuf = math.max(0, char._jumpBuf - dt)
     end
 
+    if char.grounded then
+        char.angle = getGroundSlope(char, map)
+        char.fakeAngle = char.angle
+    else
+        char.angle = 0
+        char.fakeAngle = 0
+    end
+
     if char ~= sonic_demoexe then
         if grounded and (lookUp or lookDown) then
             vx = 0
@@ -803,14 +839,13 @@ function test_update(dt, char, map)
             elseif lookDown then char.currentSprite = char.down or char.idle
             end
             char.angle = 0
-
+            char.fakeAngle = 0
         elseif moveRight or moveLeft then
             char.direction = moveRight and 1 or -1
             local accel = char.acceleration or 600
             local maxS = char.maxSpeed or 200
             vx = vx + accel * inputDir * dt
             vx = clamp(vx, -maxS, maxS)
-
         else
             if grounded then
                 vx = vx * (1 - GROUND_FRICTION)
@@ -818,15 +853,16 @@ function test_update(dt, char, map)
             else
                 vx = vx * AIR_DRAG
             end
-
             if math.abs(vx) == 0 and not char.jumping then
                 char.currentSprite = char.idle
                 char.angle = 0
+                char.fakeAngle = 0
             end
         end
         if jump and grounded then
             vy = char.jumpHeight or -300
             char.angle = 0
+            char.fakeAngle = 0
             if char.jump then updateSprite(dt, char.jump, char) end
             char.jumping = true
             char.grounded = false
@@ -856,8 +892,9 @@ function test_update(dt, char, map)
         end
     end
 
+    --not sure if fixed, even tho its useless, there was a bug, so yea
     if not char.jumping then
-        gravity = 400
+        gravity = 625
     else
         gravity = 625
     end
@@ -1967,19 +2004,12 @@ function draw_william()
                 local dx = centerX - camera_3d.x
                 local dy = centerY - camera_3d.y
                 local dz = centerZ - camera_3d.z
-                local dist = math.sqrt(dx * dx + dy * dy + dz * dz)
+                local dist = math.sqrt(dx*dx + dy*dy + dz*dz)
 
                 local fade = clamp((coastFadeEnd - dist) / (coastFadeEnd - coastFadeStart), 0, 1)
                 local col = tile[1][4]
-                love.graphics.setColor(col[1], col[2], col[3], col[4] * fade)
 
-                love.graphics.polygon(
-                    "fill",
-                    screenVerts[1][1], screenVerts[1][2],
-                    screenVerts[2][1], screenVerts[2][2],
-                    screenVerts[3][1], screenVerts[3][2],
-                    screenVerts[4][1], screenVerts[4][2]
-                )
+                fast.drawPolygon(screenVerts, col, fade)
             end
         end
     end
@@ -2587,10 +2617,6 @@ function love.touchreleased(id, x, y)
     touches[id] = nil
 
     local leftActive, rightActive = false, false
-    --[[for _, t in pairs(touches) do
-        if t.x <= base_width / 2 then leftActive = true end
-        if t.x > base_width / 2 then rightActive = true end
-    end]]
 
     if id == joystickTouchID then
         joystickTouchID = nil
