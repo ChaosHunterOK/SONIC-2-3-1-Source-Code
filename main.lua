@@ -7,7 +7,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "testmap"
+local gamestate = "knuck"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -1022,6 +1022,9 @@ local function handleBounce(knuck, demo, dt)
         if not knuck.jumping then
             blackScreen = true
             blackTimer = 3
+            sounds.bossMusic:stop()
+            bossfightActive = false
+            bossfightTimer = 0
         end
     end
 end
@@ -1054,13 +1057,13 @@ function knuck_up(dt)
     if knuckles.x > 5990 then
         waiting_knuck = waiting_knuck + dt
 
-        if waiting_knuck >= 2 and not bossfightActive then
+        if waiting_knuck >= 2 and not bossfightActive and not blackScreen then
             sounds.bossMusic:play()
             bossfightActive = true
             bossfightTimer = sounds.bossMusic:getDuration("seconds")
         end
 
-        if bossfightActive then
+        if bossfightActive and not blackScreen then
             bossfightTimer = bossfightTimer - dt
             if bossfightTimer <= 0 then
                 bossfightTimer = 0
@@ -1075,8 +1078,11 @@ function knuck_up(dt)
             blackTimer = blackTimer - dt
             if blackTimer <= 0 then
                 blackScreen = false
+                knuckles_alive = false
+                knuckles_lock = false
                 gamestate = "selection"
             end
+            return
         end
 
         if bossfightActive then
@@ -1186,6 +1192,8 @@ function eggman_up(dt)
             crashing = true
             crashTimer = 0
             love.window.setTitle("SONIC 2 3 1 (Not responding)")
+            eggman_alive = false
+            eggman_lock = false
             if not error_sound_played then
                 sounds.error_sound:play()
                 error_sound_played = true
