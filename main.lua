@@ -982,6 +982,9 @@ bossfightTimer = sounds.bossMusic:getDuration("seconds")
 bossfightTimer = 0
 bossfightActive = false
 
+blackScreen = false
+blackTimer = 0
+
 local function handleBounce(knuck, demo, dt)
     local overlapX = math.abs(knuck.x - demo.x) < (knuck.width + demo.width) / 2
     local overlapY = math.abs(knuck.y - demo.y) < (knuck.height + demo.height) / 2
@@ -1015,11 +1018,13 @@ local function handleBounce(knuck, demo, dt)
                 end
             end
         end
+
+        if not knuck.jumping then
+            blackScreen = true
+            blackTimer = 3
+        end
     end
 end
-
-blackScreen = false
-blackTimer = 0
 
 function knuck_up(dt)
     updateSprite(dt * 0.5, s1.stage2, s1)
