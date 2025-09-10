@@ -7,7 +7,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "william"
+local gamestate = "selection"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -1687,10 +1687,8 @@ function love.update(dt)
                 end
             end
         end
-
         zoomTimer = math.min(zoomTimer + dt, zoomDuration)
         local t = easeInOutCubic(zoomTimer / zoomDuration)
-        
         selectionScale = 3 + (1 - 3) * t
         selectionAlpha = 0 + (1 - 0) * t
 
@@ -1698,12 +1696,15 @@ function love.update(dt)
             selectionScale = 1
             selectionAlpha = 1
         end
-        --return
     else
         joystickCooldown = 0
         selectionLocked = false
         returnPressed = false
+        jumpButton.active = false
+        joystick.active = false
+        joystick.dx, joystick.dy = 0, 0
     end
+
 
     if gamestate == "credits" then
         local total_text_height = #credits_text * line_height
@@ -1839,68 +1840,71 @@ function selection()
     love.graphics.scale(selectionScale, selectionScale)
     love.graphics.translate(-winWidth/2, -winHeight/2)
     love.graphics.setColor(1, 1, 1, selectionAlpha)
-    local halfW, halfH = winWidth / 2, winHeight / 2
+
+    local halfW, halfH = winWidth * 0.5, winHeight * 0.5
     local offsetX2 = (mouseX - halfW) * 0.025
     local offsetY2 = (mouseY - halfH) * 0.02
 
     local spacing = 100
-    local baseX = (winWidth / 2) + offsetX2 + characterOffsetX
-    local centerY = (winHeight / 2) + offsetY2
+    local baseX = halfW + offsetX2 + characterOffsetX
+    local centerY = halfH + offsetY2
 
-    local boxX = winWidth / 2 + offsetX2
-    local boxY = centerY
-    love.graphics.draw(selection_box, boxX, boxY, 0, 1, 1, selection_box:getWidth() / 2, selection_box:getHeight() / 2)
-
+    love.graphics.draw(selection_box, halfW + offsetX2, centerY, 0, 1, 1,
+    selection_box:getWidth() * 0.5, selection_box:getHeight() * 0.5)
     local characters = {
-        { name = "tails", alive = tails_alive, lock = tails_lock, img = tails_selection, dead = dead_tails },
-        { name = "knuckles", alive = knuckles_alive, lock = knuckles_lock, img = knuck_selection, dead = dead_knuckles },
-        { name = "eggman", alive = eggman_alive, lock = eggman_lock, img = eggman_selection, dead = dead_eggman }
+        { alive = tails_alive, lock = tails_lock, img = tails_selection, dead = dead_tails },
+        { alive = knuckles_alive, lock = knuckles_lock, img = knuck_selection, dead = dead_knuckles },
+        { alive = eggman_alive, lock = eggman_lock, img = eggman_selection, dead = dead_eggman }
     }
 
     for i, char in ipairs(characters) do
+        local isSelected = (i == selectionIndex)
         local xOffset = (i - selectionIndex) * spacing
-        local scale = (i == selectionIndex) and 1 or 0.65
-        local yOffset = (i == selectionIndex) and 0 or 25
+        local scale = isSelected and 1 or 0.65
+        local yOffset = isSelected and 0 or 25
+        local alpha = isSelected and 1 or 0.7
 
         local drawX = baseX + xOffset
         local drawY = centerY + yOffset
 
-        local alpha = (i == selectionIndex) and 1 or 0.7
         love.graphics.setColor(1, 1, 1, alpha * selectionAlpha)
 
         if char.alive then
-            love.graphics.draw(char.img, drawX, drawY, 0, scale, scale, char.img:getWidth() / 2, char.img:getHeight() / 2)
-
+            love.graphics.draw(char.img, drawX, drawY, 0, scale, scale,
+                char.img:getWidth() * 0.5, char.img:getHeight() * 0.5)
             if not char.lock then
                 love.graphics.draw(lockImg, drawX - 10, drawY + 20, 0, scale, scale)
             end
         else
-            love.graphics.draw(char.dead, drawX, drawY, 0, scale, scale, char.dead:getWidth() / 2, char.dead:getHeight() / 2)
+            love.graphics.draw(char.dead, drawX, drawY, 0, scale, scale,
+                char.dead:getWidth() * 0.5, char.dead:getHeight() * 0.5)
         end
     end
-    love.graphics.setColor(1, 1, 1, selectionAlpha)
-    local arrowY = boxY - 25
+
+    local arrowY = centerY - 25
     local leftArrowX = 50
     local rightArrowX = winWidth - 100
 
-    if love.keyboard.isDown("left") then 
-        love.graphics.setColor(0.5, 0.5, 0.5 * selectionAlpha)
+    local leftActive = love.keyboard.isDown("left") or joystick.dx < -0.5
+    local rightActive = love.keyboard.isDown("right") or joystick.dx > 0.5
+
+    if leftActive then
+        love.graphics.setColor(0.5, 0.5, 0.5, selectionAlpha)
         leftArrowX = 40
-    else 
-        love.graphics.setColor(1, 1, selectionAlpha)
+    else
+        love.graphics.setColor(1, 1, 1, selectionAlpha)
     end
     love.graphics.draw(leftwImage, leftArrowX, arrowY)
 
-    if love.keyboard.isDown("right") then 
-        love.graphics.setColor(0.5, 0.5, 0.5 * selectionAlpha)
+    if rightActive then
+        love.graphics.setColor(0.5, 0.5, 0.5, selectionAlpha)
         rightArrowX = winWidth - 90
-    else 
-        love.graphics.setColor(1, 1, selectionAlpha)
+    else
+        love.graphics.setColor(1, 1, 1, selectionAlpha)
     end
     love.graphics.draw(rightwImage, rightArrowX, arrowY)
 
     love.graphics.setColor(1, 1, 1)
-
     love.graphics.pop()
 end
 
@@ -2167,24 +2171,29 @@ function linearTime(t)
 end
 
 function tails_tail_thing()
-        if tail_tails.currentSprite and (
-            tails.currentSprite == tails.idle or
-            tails.currentSprite == tails.down or
-            tails.currentSprite == tails.up
-        ) then
-            local flipX = (tails.direction == -1) and -1 or 1
-            local offsetX = (flipX == 1) and -12 or 12
-            love.graphics.draw(
-                tail_tails.currentSprite,
-                tails.x + offsetX, tails.y + 5,
-                0,
-                flipX, 1,
-                tail_tails.currentSprite:getWidth() / 2,
-                tail_tails.currentSprite:getHeight() / 2
-            )
-        elseif not tail_tails.currentSprite then
-            print("idk")
-        end
+    local tailSprite = tail_tails.currentSprite
+    local tailsSprite = tails.currentSprite
+
+    if not tailSprite then
+        print("idk")
+        return
+    end
+
+    if tailsSprite == tails.idle or tailsSprite == tails.down or tailsSprite == tails.up then
+        local flipX = (tails.direction == -1) and -1 or 1
+        local offsetX = (flipX == 1) and -12 or 12
+
+        local halfW = tailSprite:getWidth() * 0.5
+        local halfH = tailSprite:getHeight() * 0.5
+
+        love.graphics.draw(
+            tailSprite,
+            tails.x + offsetX, tails.y + 5,
+            0,
+            flipX, 1,
+            halfW, halfH
+        )
+    end
 end
 
 function mobile_stuff_draw()
