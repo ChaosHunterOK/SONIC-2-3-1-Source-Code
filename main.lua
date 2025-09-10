@@ -365,7 +365,7 @@ jumpButtonImage = fast.getImage("images/mobile_stuff/jump.png")
 function love.load()
     love.window.setMode(base_width * SCALE, base_height * SCALE, {
         fullscreen = false,
-        resizable = false,
+        resizable = true,
         vsync = true,
         highdpi = true,
     })
@@ -2246,11 +2246,13 @@ function love.draw()
 
     if gamestate == "menuscreen" or gamestate == "selection" then
         local mouseX, mouseY = love.mouse.getPosition()
-        mouseX = (mouseX - offset_x) / scale_factor
-        mouseY = (mouseY - offset_y) / scale_factor
-        local offsetX = (mouseX - base_width) * 0.05
-        local offsetY = (mouseY - base_height) * 0.05
-        drawScrollingBG(menu_finished, bgX1, bgX2, offsetX * 0.5, offsetY * 0.4)
+        local canvasMouseX = (mouseX - offset_x) / scale_factor
+        local canvasMouseY = (mouseY - offset_y) / scale_factor
+        canvasMouseX = math.max(0, math.min(base_width, canvasMouseX))
+        canvasMouseY = math.max(0, math.min(base_height, canvasMouseY))
+        local parallaxX = (canvasMouseX - base_width / 2) * 0.05
+        local parallaxY = (canvasMouseY - base_height / 2) * 0.05
+        drawScrollingBG(menu_finished, bgX1, bgX2, parallaxX * 0.5, parallaxY * 0.4)
     end
 
     if gamestate == "menuscreen" then
@@ -2557,13 +2559,16 @@ function updateCanvasScale()
     local window_width, window_height = love.graphics.getDimensions()
     local scale_x = window_width / base_width
     local scale_y = window_height / base_height
-    local scale = math.floor(math.min(scale_x, scale_y) + 0.5)
-    if scale < 1 then scale = 1 end
-    scale_factor = scale
+
+    if isMobile then
+        scale_factor = math.min(scale_x, scale_y)
+    else
+        scale_factor = math.floor(math.min(scale_x, scale_y) + 0.5)
+        if scale_factor < 1 then scale_factor = 1 end
+    end
 
     local scaled_width = base_width * scale_factor
     local scaled_height = base_height * scale_factor
-
     offset_x = math.floor((window_width - scaled_width) / 2 + 0.5)
     offset_y = math.floor((window_height - scaled_height) / 2 + 0.5)
 
