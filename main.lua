@@ -346,7 +346,7 @@ local joystick = {
 
 local jumpButton = {
     x = base_width - 45, y = base_height - 45,
-    radius = 25,
+    radius = 60,
     active = false
 }
 
@@ -2545,9 +2545,6 @@ function love.keyreleased(key)
         elseif key == "left" then
           selectionIndex = math.max(1, selectionIndex - 1)
           sounds.reboot_old:play()
-        end
-        if key == "escape" then
-            startTransition("menuscreen")
         end
     end
 end
