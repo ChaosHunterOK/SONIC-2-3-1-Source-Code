@@ -1617,7 +1617,7 @@ function love.update(dt)
     end
 
     if gamestate == "selection" then
-        if not selectionLocked then
+        --if not selectionLocked then
             if love.keyboard.isDown("return") or jumpButton.active then
                 if not returnPressed then
                     returnPressed = true
@@ -1651,7 +1651,7 @@ function love.update(dt)
                     joystickCooldown = 0.25
                 end
             end
-        end
+        --end
         zoomTimer = math.min(zoomTimer + dt, zoomDuration)
         local t = easeInOutCubic(zoomTimer / zoomDuration)
         selectionScale = 3 + (1 - 3) * t
