@@ -423,13 +423,8 @@ function love.load()
     credits_y = base_height
 end
 
-function clamp(val, minVal, maxVal)
-    return math.max(minVal, math.min(maxVal, val))
-end
-
-function lerp(a, b, t)
-    return a + (b - a) * t
-end
+function clamp(val, minVal, maxVal) return math.max(minVal, math.min(maxVal, val)) end
+function lerp(a, b, t) return a + (b - a) * t end
 
 local function dist2(a, b)
     local dx, dy, dz = a.x-b.x, a.y-b.y, a.z-b.z
@@ -647,13 +642,19 @@ function cheating(dt)
     end
 end
 
-function getControls()
-    local moveRight = love.keyboard.isDown("right") or joystick.dx > 0.25
-    local moveLeft = love.keyboard.isDown("left")  or joystick.dx < -0.25
-    local jump = love.keyboard.isDown("space") or love.keyboard.isDown("a") or jumpButton.active
+local JOYSTICK_MOVE_THRESHOLD = 0.25
+local JOYSTICK_LOOK_THRESHOLD = 0.35
 
-    local lookUp = (love.keyboard.isDown("up") or joystick.dy < -0.35) and not jump and not moveRight and not moveLeft
-    local lookDown  = (love.keyboard.isDown("down") or joystick.dy > 0.35) and not jump and not moveRight and not moveLeft
+function getControls()
+    local jdx = joystick.active and (joystick.dx or 0) or 0
+    local jdy = joystick.active and (joystick.dy or 0) or 0
+
+    local moveRight = love.keyboard.isDown("right") or jdx > JOYSTICK_MOVE_THRESHOLD
+    local moveLeft = love.keyboard.isDown("left") or jdx < -JOYSTICK_MOVE_THRESHOLD
+    local jump  = love.keyboard.isDown("space") or love.keyboard.isDown("a") or jumpButton.active
+
+    local lookUp = (love.keyboard.isDown("up") or jdy < -JOYSTICK_LOOK_THRESHOLD) and not jump and not moveRight and not moveLeft
+    local lookDown = (love.keyboard.isDown("down") or jdy >  JOYSTICK_LOOK_THRESHOLD) and not jump and not moveRight and not moveLeft
 
     return moveRight, moveLeft, jump, lookUp, lookDown
 end
@@ -745,27 +746,6 @@ function getVelocityAngle(vx, vy)
     return math.deg(math.atan2(vy, vx)) % 360
 end
 
-function snapAngle(angle, step)
-    if not angle then return 0 end
-    local snapped = math.floor((angle + step / 2) / step) * step
-    return snapped % 360
-end
-
-function getGroundSlope(char, map)
-    local leftY = getGroundY(char, map, char.x - char.width/2, char.y)
-    local rightY = getGroundY(char, map, char.x + char.width/2, char.y)
-
-    if not leftY or not rightY then return 0 end
-
-    local dy = rightY - leftY
-    local dx = char.width
-    if dy == 0 then
-        return 0
-    end
-    local angle = math.deg(math.atan2(dy, dx))
-    return snapAngle(angle, 45)
-end
-
 GROUND_FRICTION = 0.125
 local CAM_HZ_BOUND, CAM_VT_BOUND = 16, 48
 function updateCamera(dt, char, mapWidth, mapHeight)
@@ -804,7 +784,7 @@ function test_update(dt, char, map)
     local vx, vy = char.velocity.x, char.velocity.y
 
     local moveRight, moveLeft, jump, lookUp, lookDown = getControls()
-    local inputDir = moveRight and 1 or moveLeft and -1 or 0
+    local inputDir = quantize((moveRight and 1 or 0) - (moveLeft and 1 or 0))
 
     if tail_tails and tail_tails.idle then
         updateSprite(dt * 0.5, tail_tails.idle, tail_tails)
@@ -824,14 +804,6 @@ function test_update(dt, char, map)
         char._jumpBuf = math.max(0, char._jumpBuf - dt)
     end
 
-    if char.grounded then
-        char.angle = getGroundSlope(char, map)
-        char.fakeAngle = char.angle
-    else
-        char.angle = 0
-        char.fakeAngle = 0
-    end
-
     if char ~= sonic_demoexe then
         if grounded and (lookUp or lookDown) then
             vx = 0
@@ -849,7 +821,9 @@ function test_update(dt, char, map)
         else
             if grounded then
                 vx = vx * (1 - GROUND_FRICTION)
-                if math.abs(vx) < 0.1 then vx = 0 end
+                if math.abs(vx) < 0.1 then
+                    vx = 0
+                end
             else
                 vx = vx * AIR_DRAG
             end
@@ -890,13 +864,6 @@ function test_update(dt, char, map)
                 char.currentSprite = char.idle
             end
         end
-    end
-
-    --not sure if fixed, even tho its useless, there was a bug, so yea
-    if not char.jumping then
-        gravity = 625
-    else
-        gravity = 625
     end
 
     if (char._jumpBuf > 0 and char._coyote > 0 and not char.jumping) then
@@ -1701,7 +1668,6 @@ function love.update(dt)
         joystick.dx, joystick.dy = 0, 0
     end
 
-
     if gamestate == "credits" then
         local total_text_height = #credits_text * line_height
         credits_y = credits_y - (scroll_speed * dt)
@@ -1911,19 +1877,23 @@ local function char_draw(char, offsetX, offsetY)
 
     local sprite = char.currentSprite
     if type(sprite) == "table" then
-        sprite = sprite[math.floor(char.spriteIndex)] or sprite[1]
+        sprite = sprite[math.floor(char.spriteIndex + 0.5)] or sprite[1]
     end
+
     if sprite then
         local flipX = char.direction == -1 and -1 or 1
+        local drawX = math.floor(char.x + offsetX + 0.5)
+        local drawY = math.floor(char.y + offsetY + 0.5)
+
         love.graphics.draw(
             sprite,
-            char.x + offsetX,
-            char.y + offsetY,
+            drawX,
+            drawY,
             char.fakeAngle,
             flipX,
             1,
-            sprite:getWidth() / 2,
-            sprite:getHeight() / 2
+            math.floor(sprite:getWidth() / 2 + 0.5),
+            math.floor(sprite:getHeight() / 2 + 0.5)
         )
     end
 end
@@ -2226,9 +2196,12 @@ local transitionCanvas = love.graphics.newCanvas(base_width, base_height)
 
 function love.draw()
     love.graphics.setFont(Font)
-    love.graphics.setCanvas(canvas)love.graphics.setColor(0, 0, 0)
+    love.graphics.setCanvas(canvas)
+    love.graphics.setColor(0, 0, 0)
     love.graphics.rectangle("fill", 0, 0, base_width * 2, base_height * 2)
     love.graphics.setColor(1, 1, 1)
+    love.graphics.translate(offset_x, offset_y)
+    --love.graphics.scale(scale_factor, scale_factor)
 
     local function drawStageTitle(titleImg, circlesImg, actImg)
         if showStageTitle then
@@ -2276,7 +2249,7 @@ function love.draw()
         love.graphics.setColor(1, 1, 1)
 
         love.graphics.push()
-        love.graphics.translate(-math.floor(camera.x), -math.floor(camera.y))
+        love.graphics.translate(-math.floor(camera.x + 0.5), -math.floor(camera.y + 0.5))
         love.graphics.draw(test2, 0, 0)
 
         if sonic_demoexe.currentSprite then
@@ -2295,7 +2268,7 @@ function love.draw()
         if bushes_destroyed then
             love.graphics.draw(fire_bg.currentSprite, 0, 0)
         end
-        love.graphics.translate(-math.floor(camera.x), -math.floor(camera.y))
+        love.graphics.translate(-math.floor(camera.x + 0.5), -math.floor(camera.y + 0.5))
         love.graphics.draw(test3, 0, 0)
 
         if not tails_caught and tails.currentSprite then
@@ -2331,7 +2304,7 @@ function love.draw()
     elseif gamestate == "knuck" then
         love.graphics.push()
         drawScrollingBG(knuck_bg, bgX1, bgX2, 0, 0)
-        love.graphics.translate(-math.floor(camera.x), -math.floor(camera.y))
+        love.graphics.translate(-math.floor(camera.x + 0.5), -math.floor(camera.y + 0.5))
         love.graphics.draw(knuck1)
         char_draw(knuckles, 0, -2)
 
@@ -2392,7 +2365,7 @@ function love.draw()
     elseif gamestate == "eggman" then
         drawScrollingBG(menu, bgX1, bgX2, 0, 0)
         love.graphics.push()
-        love.graphics.translate(-math.floor(camera.x), -math.floor(camera.y))
+        love.graphics.translate(-math.floor(camera.x + 0.5), -math.floor(camera.y + 0.5))
         love.graphics.draw(egg_mob, 3200, 903)
         love.graphics.draw(gh1, 0, 0)
         char_draw(sonic_demoexe, 0, -2)
@@ -2469,7 +2442,7 @@ function love.draw()
         end
     elseif gamestate == "testmap" then
         love.graphics.push()
-        love.graphics.translate(-math.floor(camera.x), -math.floor(camera.y))
+        love.graphics.translate(-math.floor(camera.x + 0.5), -math.floor(camera.y + 0.5))
         love.graphics.draw(testmap, 0, 0)
         char_draw(test_character, 0, -2)
         love.graphics.pop()
@@ -2555,16 +2528,19 @@ end
 
 function updateCanvasScale()
     local window_width, window_height = love.graphics.getDimensions()
-    
     local scale_x = window_width / base_width
     local scale_y = window_height / base_height
-    scale_factor = math.min(scale_x, scale_y)
-    
+    local scale = math.floor(math.min(scale_x, scale_y) + 0.5)
+
+    if scale < 1 then scale = 1 end
+
+    scale_factor = scale
     local scaled_width = base_width * scale_factor
     local scaled_height = base_height * scale_factor
-    offset_x = (window_width - scaled_width) / 2
-    offset_y = (window_height - scaled_height) / 2
+    offset_x = math.floor((window_width - scaled_width) / 2)
+    offset_y = math.floor((window_height - scaled_height) / 2)
 end
+
 link = "https://docs.google.com/document/d/1J0nOXnQMULgsqhbdnPfF3uHCHJ0wMvX1BC4TgXKVpX8"
 function love.keypressed(key)
     if gamestate == "doc" and key == "return" then
@@ -2588,20 +2564,28 @@ function love.touchpressed(id, x, y)
         if not joystickTouchID then
             joystickTouchID = id
             joystick.active = true
-            joystick.dx = (x - joystick.x) / joystick.radius
-            joystick.dy = (y - joystick.y) / joystick.radius
+            local dx = x - joystick.x
+            local dy = y - joystick.y
+            local len = math.sqrt(dx*dx + dy*dy)
+            local maxDist = joystick.radius
+            if len > maxDist and len > 0 then
+                dx = dx / len * maxDist
+                dy = dy / len * maxDist
+            end
+            joystick.dx = dx / joystick.radius
+            joystick.dy = dy / joystick.radius
         end
-    else
-        if not cameraTouchID and gamestate == "william" then
-            cameraTouchID = id
-            lastTouchX, lastTouchY = x, y
-        else
-            jumpButton.active = true
-        end
+        return
     end
 
     if x > base_width / 2 then
-        jumpButton.active = true
+        if not cameraTouchID and gamestate == "william" then
+            cameraTouchID = id
+            lastTouchX, lastTouchY = x, y
+            return
+        end
+        --jumpButton.active = true
+        return
     end
 
     if splash_done and finished_transformation then
@@ -2623,17 +2607,17 @@ end
 
 function love.touchmoved(id, x, y)
     if not isMobile or not touches[id] then return end
+
     x = (x - offset_x) / scale_factor
     y = (y - offset_y) / scale_factor
-
     touches[id].x, touches[id].y = x, y
 
-    if joystick.active and x <= base_width / 2 then
+    if joystick.active and id == joystickTouchID then
         local dx = x - joystick.x
         local dy = y - joystick.y
         local len = math.sqrt(dx*dx + dy*dy)
         local maxDist = joystick.radius
-        if len > maxDist then
+        if len > maxDist and len > 0 then
             dx = dx / len * maxDist
             dy = dy / len * maxDist
         end
@@ -2654,8 +2638,6 @@ function love.touchreleased(id, x, y)
     if not isMobile then return end
     touches[id] = nil
 
-    local leftActive, rightActive = false, false
-
     if id == joystickTouchID then
         joystickTouchID = nil
         joystick.active = false
@@ -2664,9 +2646,15 @@ function love.touchreleased(id, x, y)
 
     if id == cameraTouchID and gamestate == "william" then
         cameraTouchID = nil
+        lastTouchX, lastTouchY = nil, nil
     end
+
+    local rightActive = false
     for _, t in pairs(touches) do
-        if t.x > base_width / 2 then rightActive = true break end
+        if t.x and t.x > base_width / 2 then
+            rightActive = true
+            break
+        end
     end
     if not rightActive then
         jumpButton.active = false
@@ -2680,5 +2668,15 @@ function sign(x)
         return -1
     else
         return 0
+    end
+end
+
+function quantize(v)
+    if math.abs(v) < 0.25 then
+        return 0
+    elseif v > 0 then
+        return 1
+    else
+        return -1
     end
 end
