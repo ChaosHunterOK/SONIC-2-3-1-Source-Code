@@ -1665,9 +1665,9 @@ function love.update(dt)
         joystickCooldown = 0
         selectionLocked = false
         returnPressed = false
-        jumpButton.active = false
-        joystick.active = false
-        joystick.dx, joystick.dy = 0, 0
+        --jumpButton.active = false
+        --joystick.active = false
+        --joystick.dx, joystick.dy = 0, 0
     end
 
     if gamestate == "credits" then
