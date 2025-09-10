@@ -648,10 +648,6 @@ function cheating(dt)
 end
 
 function getControls()
-    if gamestate == "selection" then
-        return false, false, false, false, false
-    end
-
     local moveRight = love.keyboard.isDown("right") or joystick.dx > 0.25
     local moveLeft = love.keyboard.isDown("left")  or joystick.dx < -0.25
     local jump = love.keyboard.isDown("space") or love.keyboard.isDown("a") or jumpButton.active
