@@ -2211,6 +2211,7 @@ local transitionCanvas = love.graphics.newCanvas(base_width, base_height)
 function love.draw()
     love.graphics.setFont(Font)
     love.graphics.setCanvas(canvas)
+    love.graphics.clear(0,0,0,1)
     love.graphics.setColor(0, 0, 0)
     love.graphics.rectangle("fill", 0, 0, base_width * 2, base_height * 2)
     love.graphics.setColor(1, 1, 1)
@@ -2556,17 +2557,18 @@ function updateCanvasScale()
     local window_width, window_height = love.graphics.getDimensions()
     local scale_x = window_width / base_width
     local scale_y = window_height / base_height
-
     local scale = math.floor(math.min(scale_x, scale_y) + 0.5)
-    --if scale < 1 then scale = 1 end
-
+    if scale < 1 then scale = 1 end
     scale_factor = scale
+
     local scaled_width = base_width * scale_factor
     local scaled_height = base_height * scale_factor
+
     offset_x = math.floor((window_width - scaled_width) / 2 + 0.5)
     offset_y = math.floor((window_height - scaled_height) / 2 + 0.5)
-    --offset_x = math.max(0, offset_x)
-    --offset_y = math.max(0, offset_y)
+
+    offset_x = math.max(0, offset_x)
+    offset_y = math.max(0, offset_y)
 end
 
 link = "https://docs.google.com/document/d/1J0nOXnQMULgsqhbdnPfF3uHCHJ0wMvX1BC4TgXKVpX8"
