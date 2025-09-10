@@ -1649,7 +1649,7 @@ function love.update(dt)
 
     if gamestate == "selection" then
         if not selectionLocked then
-            if love.keyboard.isDown("return") then
+            if love.keyboard.isDown("return") or jumpButton.active then
                 if not returnPressed then
                     returnPressed = true
                     if selectionIndex == 1 and tails_lock then
