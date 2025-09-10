@@ -213,7 +213,8 @@ stage3_vis = true
 
 local tails = createCharacter{ x = 100, y = 50, maxSpeed = 200 }
 tails.idle = fast.getImage(spritesFolder .. "tails/idle.png")
-tails.down = fast.getImage(spritesFolder .. "tails/down/1.png")
+tails.down = fast.getImage(spritesFolder .. "tails/down.png")
+tails.up = fast.getImage(spritesFolder .. "tails/up.png")
 tails.walk = loadFrames(spritesFolder .. "tails/walking/", 8)
 tails.jump = loadFrames(spritesFolder .. "tails/jump/", 3)
 tails.run = loadFrames(spritesFolder .. "tails/run/", 2)
@@ -227,6 +228,7 @@ knuckles.wait = loadFrames(spritesFolder .. "knuckles/confused/", 2)
 
 local eggman = createCharacter{ x = 3300, y = 50, maxSpeed = 140 }
 eggman.idle = fast.getImage(spritesFolder .. "eggman/idle.png")
+eggman.down = fast.getImage(spritesFolder .. "eggman/down.png")
 eggman.walk = loadFrames(spritesFolder .. "eggman/walking/", 3)
 eggman.run = loadFrames(spritesFolder .. "eggman/walking/", 3)
 eggman.jump = loadFrames(spritesFolder .. "eggman/walking/", 1)
