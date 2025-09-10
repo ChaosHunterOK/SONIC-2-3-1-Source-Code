@@ -1,7 +1,8 @@
 local ffi = require("ffi")
 local discord = {}
 
-discord.C = ffi.load("discord-rpc")
+local C = ffi.load("discord-rpc")
+discord.C = C
 
 ffi.cdef[[
     typedef struct DiscordRichPresence {
@@ -27,38 +28,42 @@ ffi.cdef[[
     void Discord_UpdatePresence(const DiscordRichPresence* presence);
     void Discord_RunCallbacks();
 ]]
+local presence = ffi.new("DiscordRichPresence")
 
-function discord.initialize(appId)
-    discord.C.Discord_Initialize(appId, nil, 1, nil)
+local function setField(field, value, default)
+    presence[field] = value ~= nil and value or default
 end
 
-function discord.updatePresence(presenceData)
-    local presence = ffi.new("DiscordRichPresence")
-    presence.state = presenceData.state
-    presence.details = presenceData.details
-    presence.startTimestamp = presenceData.startTimestamp or 0
-    presence.endTimestamp = presenceData.endTimestamp or 0
-    presence.largeImageKey = presenceData.largeImageKey or nil
-    presence.largeImageText = presenceData.largeImageText or nil
-    presence.smallImageKey = presenceData.smallImageKey or nil
-    presence.smallImageText = presenceData.smallImageText or nil
-    presence.partyId = presenceData.partyId or nil
-    presence.partySize = presenceData.partySize or 0
-    presence.partyMax = presenceData.partyMax or 0
-    presence.matchSecret = presenceData.matchSecret or nil
-    presence.joinSecret = presenceData.joinSecret or nil
-    presence.spectateSecret = presenceData.spectateSecret or nil
-    presence.instance = presenceData.instance or 0
+function discord.initialize(appId)
+    C.Discord_Initialize(appId, nil, 1, nil)
+end
 
-    discord.C.Discord_UpdatePresence(presence)
+function discord.updatePresence(data)
+    setField("state", data.state, nil)
+    setField("details", data.details, nil)
+    setField("startTimestamp", data.startTimestamp, 0)
+    setField("endTimestamp", data.endTimestamp, 0)
+    setField("largeImageKey", data.largeImageKey, nil)
+    setField("largeImageText", data.largeImageText, nil)
+    setField("smallImageKey", data.smallImageKey, nil)
+    setField("smallImageText", data.smallImageText, nil)
+    setField("partyId", data.partyId, nil)
+    setField("partySize", data.partySize, 0)
+    setField("partyMax", data.partyMax, 0)
+    setField("matchSecret", data.matchSecret, nil)
+    setField("joinSecret", data.joinSecret, nil)
+    setField("spectateSecret", data.spectateSecret, nil)
+    setField("instance", data.instance, 0)
+
+    C.Discord_UpdatePresence(presence)
 end
 
 function discord.runCallbacks()
-    discord.C.Discord_RunCallbacks()
+    C.Discord_RunCallbacks()
 end
 
 function discord.shutdown()
-    discord.C.Discord_Shutdown()
+    C.Discord_Shutdown()
 end
 
 return discord

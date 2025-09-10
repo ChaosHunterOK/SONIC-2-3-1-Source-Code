@@ -156,18 +156,13 @@ local function createCharacter(opts)
         maxSpeed = opts.maxSpeed or 175,
         friction = 2,
         onGroundY = 0,
-        isDead = false,
         fallTimer = 0,
-        jumpSpeed = 100,
-        fallSpeed = 100,
         isPresent = true,
         angle = 0,
         visible = true,
         runThreshold = opts.runThreshold or 175,
-        lastGroundedY = 0,
         spriteIndex = 1,
         currentSprite = nil,
-        startedChase = false,
         targetX = 0,
         targetY = 0,
         fakeAngle = 0
@@ -648,12 +643,16 @@ function cheating(dt)
 end
 
 function getControls()
+    if gamestate == "selection" then
+        return false, false, false, false, false
+    end
+
     local moveRight = love.keyboard.isDown("right") or joystick.dx > 0.25
     local moveLeft = love.keyboard.isDown("left")  or joystick.dx < -0.25
     local jump = love.keyboard.isDown("space") or love.keyboard.isDown("a") or jumpButton.active
 
     local lookUp = (love.keyboard.isDown("up") or joystick.dy < -0.35) and not jump and not moveRight and not moveLeft
-    local lookDown = (love.keyboard.isDown("down") or joystick.dy > 0.35) and not jump and not moveRight and not moveLeft
+    local lookDown  = (love.keyboard.isDown("down") or joystick.dy > 0.35) and not jump and not moveRight and not moveLeft
 
     return moveRight, moveLeft, jump, lookUp, lookDown
 end
@@ -2555,8 +2554,10 @@ function love.touchpressed(id, x, y)
 
     x = (x - offset_x) / scale_factor
     y = (y - offset_y) / scale_factor
-
     touches[id] = {x=x, y=y}
+    if gamestate == "selection" then
+        return
+    end
 
     if x <= base_width / 2 then
         if not joystickTouchID then
@@ -2597,7 +2598,6 @@ end
 
 function love.touchmoved(id, x, y)
     if not isMobile or not touches[id] then return end
-
     x = (x - offset_x) / scale_factor
     y = (y - offset_y) / scale_factor
 
