@@ -2581,9 +2581,6 @@ function love.touchpressed(id, x, y)
     x = (x - offset_x) / scale_factor
     y = (y - offset_y) / scale_factor
     touches[id] = {x=x, y=y}
-    if gamestate == "selection" then
-        return
-    end
 
     if x <= base_width / 2 then
         if not joystickTouchID then
