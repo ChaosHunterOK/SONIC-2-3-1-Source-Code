@@ -193,14 +193,20 @@ local function loadFrames(basePath, count)
     return frames
 end
 
-local transitionAlpha = 1
-local transitioning = false
-local transitionTarget = ""
-local transitionSpeed = 1.5
+transitionAlpha = 1
+transitioning = false
+transitionTarget = ""
+transitionSpeed = 1.5
+
+colorPhaseTime = 0.25
+colorTimer = 0
+colorLerp = 0
 
 function startTransition(target)
-  transitioning = true
-  transitionTarget = target
+    transitioning = true
+    transitionTarget = target
+    colorTimer = 0
+    colorLerp = 0
 end
 
 stage1 = fast.getImage(spritesFolder.."sonic_demo.exe/anim/knuckles/stage1.png")
@@ -1755,6 +1761,12 @@ function love.update(dt)
     else
         transitionAlpha = math.max(transitionAlpha - transitionSpeed * dt, 0)
     end
+
+    colorTimer = colorTimer + dt
+    colorLerp = (colorTimer % colorPhaseTime) / colorPhaseTime
+    if math.floor(colorTimer / colorPhaseTime) % 2 == 1 then
+        colorLerp = 1 - colorLerp
+    end
     if shrinkingMenu then
         shrinkTimer = math.min(shrinkTimer + dt, shrinkDuration)
         local t = shrinkTimer / shrinkDuration
@@ -2483,8 +2495,20 @@ function drawTransition(alpha)
         love.graphics.setColor(1,1,1)
         love.graphics.draw(canvas)
     end)
+    local r1,g1,b1, r2,g2,b2
+    if transitioning then
+        r1,g1,b1 = 1,1,1
+        r2,g2,b2 = 0,0,1
+    else
+        r1,g1,b1 = 0,0,1
+        r2,g2,b2 = 1,1,1
+    end
 
-    love.graphics.setColor(quantizeColor(0.3, 0.3, 1, levels))
+    local r = r1 + (r2 - r1) * colorLerp
+    local g = g1 + (g2 - g1) * colorLerp
+    local b = b1 + (b2 - b1) * colorLerp
+
+    love.graphics.setColor(quantizeColor(r, g, b, levels))
     love.graphics.setBlendMode("multiply", "premultiplied")
     love.graphics.draw(transitionCanvas)
     love.graphics.setBlendMode("alpha")
@@ -2534,7 +2558,7 @@ function updateCanvasScale()
     local scale_y = window_height / base_height
 
     local scale = math.floor(math.min(scale_x, scale_y) + 0.5)
-    if scale < 1 then scale = 1 end
+    --if scale < 1 then scale = 1 end
 
     scale_factor = scale
     local scaled_width = base_width * scale_factor
