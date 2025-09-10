@@ -2460,7 +2460,7 @@ function love.draw()
         local t = love.timer.getTime()
         if cheating_vis2 then
             love.graphics.print("How dare you cheat within my realm, my game.", 40, 50 + math.sin(t*2.5)*3)
-            love.graphics.print("You won't let you escape from your fate that easily.", 75, 157 + math.sin(t*2)*2)
+            love.graphics.print("I won't let you escape from your fate that easily.", 75, 157 + math.sin(t*2)*2)
         end
     elseif gamestate == "testmap" then
         love.graphics.push()
