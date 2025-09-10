@@ -346,7 +346,7 @@ local joystick = {
 
 local jumpButton = {
     x = base_width - 45, y = base_height - 45,
-    radius = 50,
+    radius = 25,
     active = false
 }
 
