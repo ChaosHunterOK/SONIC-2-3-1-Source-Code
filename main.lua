@@ -2565,8 +2565,8 @@ function updateCanvasScale()
     local scaled_height = base_height * scale_factor
     offset_x = math.floor((window_width - scaled_width) / 2 + 0.5)
     offset_y = math.floor((window_height - scaled_height) / 2 + 0.5)
-    offset_x = math.max(0, offset_x)
-    offset_y = math.max(0, offset_y)
+    --offset_x = math.max(0, offset_x)
+    --offset_y = math.max(0, offset_y)
 end
 
 link = "https://docs.google.com/document/d/1J0nOXnQMULgsqhbdnPfF3uHCHJ0wMvX1BC4TgXKVpX8"
