@@ -7,7 +7,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "knuck"
+local gamestate = "william"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -449,10 +449,14 @@ function william_update(dt)
     camera_3d.roll = camera_3d.roll + (targetRoll - camera_3d.roll) * math.min(dt * rollReturnSpeed, 1)
     targetRoll = targetRoll + (0 - targetRoll) * math.min(dt * rollReturnSpeed, 1)
     local inputX, inputZ = 0, 0
-    if love.keyboard.isDown("w") or joystick.dy < -0.2 then inputZ = inputZ + 1 end
-    if love.keyboard.isDown("s") or joystick.dy > 0.2 then inputZ = inputZ - 1 end
-    if love.keyboard.isDown("a") or joystick.dx > -0.2 then inputX = inputX - 1 end
-    if love.keyboard.isDown("d") or joystick.dx < 0.2 then inputX = inputX + 1 end
+    if love.keyboard.isDown("w") then inputZ = inputZ + 1 end
+    if love.keyboard.isDown("s") then inputZ = inputZ - 1 end
+    if love.keyboard.isDown("a") then inputX = inputX - 1 end
+    if love.keyboard.isDown("d") then inputX = inputX + 1 end
+    if joystick.dy < -0.2 then inputZ = inputZ + 1 end
+    if joystick.dy >  0.2 then inputZ = inputZ - 1 end
+    if joystick.dx < -0.2 then inputX = inputX - 1 end
+    if joystick.dx >  0.2 then inputX = inputX + 1 end
     local len = inputX*inputX + inputZ*inputZ
     if len > 0 then
         len = 1 / math.sqrt(len)
@@ -492,6 +496,7 @@ function william_update(dt)
         chaser.y = chaser.y + chaser.vy * dt
         chaser.z = chaser.z + chaser.vz * dt
     end
+    preloadTiles()
     if distSq < 1 then
         gamestate = "game_over"
     end
@@ -1043,13 +1048,10 @@ function knuck_up(dt)
         stage2_vis = false
         knuck_bg = knuck_bg2
         demo_vis = true
-    end
-    if knuckles.x >= 5350 then
+    elseif knuckles.x >= 5350 then
         stage3_vis = false
         knuck_bg = knuck_bg3
-    end
-
-    if knuckles.x > 5990 then
+    elseif knuckles.x > 5990 then
         idk_fix = true
     end
 
@@ -1969,23 +1971,16 @@ function openURL(url)
     end
 end
 
-function draw_william()
-    love.graphics.push()
+local preloadedTiles = {}
 
-    local w, h = base_width, base_height
-    local hw, hh = w * 0.5, h * 0.5
-    local aspect = w / h
-    local fovRad = math.rad(70)
-
-    if not sounds.buildUPSound:isPlaying() then
-        sounds.buildUPSound:play()
-    end
-
+function preloadTiles()
+    preloadedTiles = {}
     local cy, sy = math.cos(-camera_3d.yaw), math.sin(-camera_3d.yaw)
     local cp, sp = math.cos(-camera_3d.pitch), math.sin(-camera_3d.pitch)
+    local fovRad = math.rad(70)
     local fovHalfTan = math.tan(fovRad / 2)
-    local coastFadeStart = 50
-    local coastFadeEnd = 80
+    local hw, hh = base_width * 0.5, base_height * 0.5
+    local aspect = base_width / base_height
 
     for t = 1, #baseplateTiles do
         local tile = baseplateTiles[t]
@@ -2004,6 +1999,7 @@ function draw_william()
                     visible = false
                     break
                 end
+
                 local sx = x1 / (z2 * fovHalfTan * aspect)
                 local sy = y1 / (z2 * fovHalfTan)
                 screenVerts[i] = {sx * hw + hw, -sy * hh + hh}
@@ -2018,12 +2014,42 @@ function draw_william()
                 local dz = centerZ - camera_3d.z
                 local dist = math.sqrt(dx*dx + dy*dy + dz*dz)
 
-                local fade = clamp((coastFadeEnd - dist) / (coastFadeEnd - coastFadeStart), 0, 1)
-                local col = tile[1][4]
-
-                fast.drawPolygon(screenVerts, col, fade)
+                table.insert(preloadedTiles, {
+                    verts = screenVerts,
+                    col = tile[1][4],
+                    dist = dist
+                })
             end
         end
+    end
+end
+
+function draw_william()
+    love.graphics.push()
+
+    local w, h = base_width, base_height
+    local hw, hh = w * 0.5, h * 0.5
+    local aspect = w / h
+    local fovRad = math.rad(70)
+
+    if not sounds.buildUPSound:isPlaying() then
+        sounds.buildUPSound:play()
+    end
+
+    local coastFadeStart, coastFadeEnd = 50, 80
+
+    local w, h = base_width, base_height
+    local hw, hh = w * 0.5, h * 0.5
+    local aspect = w / h
+    local fovRad = math.rad(70)
+
+    local cy, sy = math.cos(-camera_3d.yaw), math.sin(-camera_3d.yaw)
+    local cp, sp = math.cos(-camera_3d.pitch), math.sin(-camera_3d.pitch)
+    local fovHalfTan = math.tan(fovRad / 2)
+
+    for _, t in ipairs(preloadedTiles) do
+        local fade = clamp((coastFadeEnd - t.dist) / (coastFadeEnd - coastFadeStart), 0, 1)
+        fast.drawPolygon(t.verts, t.col, fade)
     end
     do
         local x, y, z = chaser.x - camera_3d.x, chaser.y - camera_3d.y, chaser.z - camera_3d.z
@@ -2041,7 +2067,7 @@ function draw_william()
             local alpha = clamp((fadeStart - dist) / (fadeStart - fadeEnd), 0, 1)
 
             love.graphics.setColor(1, 1, 1, alpha)
-            love.graphics.draw(
+            fast.draw(
                 chase_img,
                 sx * hw + hw - chase_img:getWidth() * scale / 2,
                 -sy * hh + hh - chase_img:getHeight() * scale / 2,
