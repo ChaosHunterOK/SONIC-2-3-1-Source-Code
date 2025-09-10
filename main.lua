@@ -2202,7 +2202,7 @@ function love.draw()
     love.graphics.setColor(0, 0, 0)
     love.graphics.rectangle("fill", 0, 0, base_width * 2, base_height * 2)
     love.graphics.setColor(1, 1, 1)
-    love.graphics.translate(offset_x, offset_y)
+    --love.graphics.translate(offset_x, offset_y)
     --love.graphics.scale(scale_factor, scale_factor)
 
     local function drawStageTitle(titleImg, circlesImg, actImg)
@@ -2533,14 +2533,13 @@ function updateCanvasScale()
     local scale_x = window_width / base_width
     local scale_y = window_height / base_height
     local scale = math.floor(math.min(scale_x, scale_y) + 0.5)
-
     if scale < 1 then scale = 1 end
 
     scale_factor = scale
     local scaled_width = base_width * scale_factor
     local scaled_height = base_height * scale_factor
-    offset_x = math.floor((window_width - scaled_width) / 2)
-    offset_y = math.floor((window_height - scaled_height) / 2)
+    offset_x = math.floor((window_width - scaled_width) / 2 + 0.5)
+    offset_y = math.floor((window_height - scaled_height) / 2 + 0.5)
 end
 
 link = "https://docs.google.com/document/d/1J0nOXnQMULgsqhbdnPfF3uHCHJ0wMvX1BC4TgXKVpX8"
