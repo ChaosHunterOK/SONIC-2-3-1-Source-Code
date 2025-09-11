@@ -7,7 +7,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "selection"
+local gamestate = "menuscreen"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -1372,6 +1372,7 @@ local flickerTimer = 0
 local flickerInterval = 0.5
 local showPressText = true
 local flickerActive = false
+link = "https://docs.google.com/document/d/1J0nOXnQMULgsqhbdnPfF3uHCHJ0wMvX1BC4TgXKVpX8"
 function menuscreen_update(dt)
     if gamestate ~= "menuscreen" then return end
 
@@ -1408,7 +1409,7 @@ function menuscreen_update(dt)
             pressTextTimer = math.min(pressTextTimer + dt, pressTextAnimTime)
         end
 
-        if love.keyboard.isDown("return") and finished_transformation then
+        if (love.keyboard.isDown("return") or jumpButton.active) and finished_transformation then
             shrinkingMenu = true
             if sounds.laugh_sound then
                 sounds.laugh_sound:play()
@@ -1546,9 +1547,11 @@ local function updateScrollingBG(dt)
     local width = menu:getWidth()
     bgX1 = bgX1 + scroll_speed * dt
     bgX2 = bgX2 + scroll_speed * dt
+    if bgX1 >= width then bgX1 = bgX2 - width
+    elseif bgX1 <= -width then bgX1 = bgX2 + width end
 
-    if bgX1 >= width then bgX1 = bgX2 - width end
-    if bgX2 >= width then bgX2 = bgX1 - width end
+    if bgX2 >= width then bgX2 = bgX1 - width
+    elseif bgX2 <= -width then bgX2 = bgX1 + width end
 end
 
 function love.update(dt)
@@ -1616,8 +1619,11 @@ function love.update(dt)
         love.mouse.setRelativeMode(true)
     elseif gamestate == "cheating" then
         cheating(dt)
-    elseif gamestate == "warning" and love.keyboard.isDown("return") then
+    elseif gamestate == "warning" and (love.keyboard.isDown("return") or jumpButton.active) then
         startTransition("error")
+    elseif gamestate == "doc" and (love.keyboard.isDown("return") or jumpButton.active) then
+        openURL(link)
+        love.event.quit()
     else
         love.mouse.setRelativeMode(false)
     end
@@ -1893,7 +1899,6 @@ local function char_draw(char, offsetX, offsetY)
     if type(sprite) == "table" then
         sprite = sprite[math.floor(char.spriteIndex + 0.5)] or sprite[1]
     end
-
     if sprite then
         local flipX = char.direction == -1 and -1 or 1
         local drawX = math.floor(char.x + offsetX + 0.5)
@@ -1913,8 +1918,9 @@ local function char_draw(char, offsetX, offsetY)
 end
 
 local function drawScrollingBG(image, x1, x2, offsetX, offsetY)
-    love.graphics.draw(image, x1 + offsetX, offsetY)
-    love.graphics.draw(image, x2 + offsetX, offsetY)
+    local screenW, screenH = base_width, base_height
+    if x1 + offsetX + image:getWidth() > 0 and x1 + offsetX < screenW then love.graphics.draw(image, x1 + offsetX, offsetY) end
+    if x2 + offsetX + image:getWidth() > 0 and x2 + offsetX < screenW then love.graphics.draw(image, x2 + offsetX, offsetY) end
 end
 
 DEMO_MenuScreen = fast.getImage(spritesFolder.."menuscreen/splash/6.png")
@@ -2073,7 +2079,6 @@ function draw_menuscreen()
     love.graphics.scale(menuShrink, menuShrink)
     love.graphics.translate(-base_width/2, -base_height/2)
     if finished_transformation then
-        sounds.sonic_theme:setLooping(false)
         sounds.sonic_theme:stop()
 
         local mouseX, mouseY = love.mouse.getPosition()
@@ -2219,29 +2224,32 @@ function love.draw()
     --love.graphics.scale(scale_factor, scale_factor)
 
     local function drawStageTitle(titleImg, circlesImg, actImg)
-        if showStageTitle then
-            local alpha = 1
-            if stageTitleTimer > stageTitleDuration - stageTitleFadeTime then
-                alpha = (stageTitleDuration - stageTitleTimer) / stageTitleFadeTime
-            end
-            alpha = clamp(alpha, 0, 1)
+        if not showStageTitle then return end
 
-            love.graphics.setColor(0, 0, 0, alpha)
-            love.graphics.rectangle("fill", 0, 0, base_width, base_height)
-            love.graphics.setColor(1, 1, 1, 1)
-
-            local enterProgress = math.min(stageTitleTimer / stageTitleFadeTime, 1)
-            local startX, endX = -100, base_width / 2 - (titleImg:getWidth() / 2) - 60
-            local slideX = lerp(startX, endX, linearTime(enterProgress))
-
-            if stageTitleTimer > stageTitleDuration - stageTitleFadeTime then
-                local exitProgress = 1 - ((stageTitleDuration - stageTitleTimer) / stageTitleFadeTime)
-                slideX = lerp(endX, base_width + 130, linearTime(exitProgress))
-            end
-
-            local y = base_height / 2 - 40
-            drawTitleCard(titleImg, circlesImg, actImg, slideX, y)
+        local remaining = stageTitleDuration - stageTitleTimer
+        local alpha = 1
+        if remaining < stageTitleFadeTime then
+            alpha = remaining / stageTitleFadeTime
         end
+
+        alpha = clamp(alpha, 0, 1)
+        if alpha <= 0 then return end
+
+        love.graphics.setColor(0, 0, 0, alpha)
+        love.graphics.rectangle("fill", 0, 0, base_width, base_height)
+        love.graphics.setColor(1, 1, 1, 1)
+
+        local enterProgress = math.min(stageTitleTimer / stageTitleFadeTime, 1)
+        local startX = -100
+        local endX = (base_width - titleImg:getWidth()) / 2 - 60
+        local slideX = lerp(startX, endX, linearTime(enterProgress))
+
+        if remaining < stageTitleFadeTime then
+            local exitProgress = 1 - (remaining / stageTitleFadeTime)
+            slideX = lerp(endX, base_width + 130, linearTime(exitProgress))
+        end
+        local y = base_height / 2 - 40
+        drawTitleCard(titleImg, circlesImg, actImg, slideX, y)
     end
 
     if gamestate == "menuscreen" or gamestate == "selection" then
@@ -2325,36 +2333,29 @@ function love.draw()
         love.graphics.draw(knuck1)
         char_draw(knuckles, 0, -2)
 
-        if demo_vis then char_draw(sonic_demoexe, 0, -2) end
-        if stage1_vis then love.graphics.draw(stage1, 2544, 518) end
-        if stage2_vis and s1.currentSprite then love.graphics.draw(s1.currentSprite, 4387, 864) end
-        if stage3_vis then love.graphics.draw(stage3, 5481, 867) end
-
-        if stage1_vis == false then
+        if demo_vis then char_draw(sonic_demoexe, 0, -2)
+        elseif stage1_vis then love.graphics.draw(stage1, 2544, 518)
+        elseif stage2_vis and s1.currentSprite then love.graphics.draw(s1.currentSprite, 4387, 864)
+        elseif stage3_vis then love.graphics.draw(stage3, 5481, 867)
+        elseif stage1_vis == false then
             if not soundPlayed10 then
             sounds.rebootSound:play()
             flashScreen(0.45)
             soundPlayed10 = true
             end
-        end
-
-        if stage3_vis == false then
+        elseif stage3_vis == false then
             if not soundPlayed8 then
             sounds.rebootSound:play()
             flashScreen(0.45)
             soundPlayed8 = true
             end
-        end
-        
-        if stage2_vis == false then
+        elseif stage2_vis == false then
             if not soundPlayed9 then
             sounds.rebootSound:play()
             flashScreen(0.45)
             soundPlayed9 = true
             end
-        end
-
-        if idk_fix then
+        elseif idk_fix then
             if knuckles.x < 5991 then
                 knuckles.x = 5991
                 knuckles.velocity.x = math.max(0, knuckles.velocity.x)
@@ -2576,14 +2577,6 @@ function updateCanvasScale()
     offset_y = math.max(0, offset_y)
 end
 
-link = "https://docs.google.com/document/d/1J0nOXnQMULgsqhbdnPfF3uHCHJ0wMvX1BC4TgXKVpX8"
-function love.keypressed(key)
-    if gamestate == "doc" and key == "return" then
-        openURL(link)
-        love.event.quit()
-    end
-end
-
 local cameraTouchID = nil
 local joystickTouchID = nil
 local lastTouchX, lastTouchY = nil, nil
@@ -2621,22 +2614,6 @@ function love.touchpressed(id, x, y)
         end
         jumpButton.active = true
         return
-    end
-
-    if splash_done and finished_transformation then
-        shrinkingMenu = true
-        if sounds.laugh_sound then
-            sounds.laugh_sound:play()
-        end
-    end
-
-    if gamestate == "doc" then
-        openURL(link)
-        love.event.quit()
-    end
-
-    if gamestate == "warning" then
-        startTransition("error")
     end
 end
 
