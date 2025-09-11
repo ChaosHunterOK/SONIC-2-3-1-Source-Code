@@ -1576,7 +1576,6 @@ function love.update(dt)
                 tails_alive = false
                 knuckles_lock = true
                 tails_lock = false
-                --startTransition("selection")
                 gamestate = "selection"
             end
         end
@@ -1926,7 +1925,6 @@ end
 DEMO_MenuScreen = fast.getImage(spritesFolder.."menuscreen/splash/6.png")
 greenHillZoneCircles = fast.getImage("images/zone/circles/g_hill.png")
 greenHillZoneCircles_2 = fast.getImage("images/zone/circles/g_hill_2.png")
-local udZoneCircles = fast.getImage("images/zone/circles/u_d.png")
 local hideAndSeekZoneCircles = fast.getImage("images/zone/circles/h&s.png")
 local DotCircles = fast.getImage("images/zone/circles/dot.png")
 labCircles = fast.getImage("images/zone/circles/us.png")
