@@ -1452,7 +1452,6 @@ function drawStageAct(img, x, y)
 end
 local greenHillZoneTitle = fast.getImage("images/zone/titles/zone.png")
 greenHillZoneTitle_2 = fast.getImage("images/zone/titles/g_hill.png")
-local udZoneTitle = fast.getImage("images/zone/titles/u_d.png")
 local hideAndSeekZoneTitle = fast.getImage("images/zone/titles/h&s.png")
 local DotTitle = fast.getImage("images/zone/titles/dot.png")
 labTitle = fast.getImage("images/zone/titles/us.png")
