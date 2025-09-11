@@ -2330,29 +2330,36 @@ function love.draw()
         love.graphics.draw(knuck1)
         char_draw(knuckles, 0, -2)
 
-        if demo_vis then char_draw(sonic_demoexe, 0, -2)
-        elseif stage1_vis then love.graphics.draw(stage1, 2544, 518)
-        elseif stage2_vis and s1.currentSprite then love.graphics.draw(s1.currentSprite, 4387, 864)
-        elseif stage3_vis then love.graphics.draw(stage3, 5481, 867)
-        elseif stage1_vis == false then
+        if demo_vis then char_draw(sonic_demoexe, 0, -2) end
+        if stage1_vis then love.graphics.draw(stage1, 2544, 518) end
+        if stage2_vis and s1.currentSprite then love.graphics.draw(s1.currentSprite, 4387, 864) end
+        if stage3_vis then love.graphics.draw(stage3, 5481, 867) end
+
+        if stage1_vis == false then
             if not soundPlayed10 then
             sounds.rebootSound:play()
             flashScreen(0.45)
             soundPlayed10 = true
             end
-        elseif stage3_vis == false then
+        end
+
+        if stage3_vis == false then
             if not soundPlayed8 then
             sounds.rebootSound:play()
             flashScreen(0.45)
             soundPlayed8 = true
             end
-        elseif stage2_vis == false then
+        end
+        
+        if stage2_vis == false then
             if not soundPlayed9 then
             sounds.rebootSound:play()
             flashScreen(0.45)
             soundPlayed9 = true
             end
-        elseif idk_fix then
+        end
+
+        if idk_fix then
             if knuckles.x < 5991 then
                 knuckles.x = 5991
                 knuckles.velocity.x = math.max(0, knuckles.velocity.x)
