@@ -165,7 +165,8 @@ local function createCharacter(opts)
         currentSprite = nil,
         targetX = 0,
         targetY = 0,
-        fakeAngle = 0
+        fakeAngle = 0,
+        physics_enabled = true
     }
 end
 
@@ -220,10 +221,12 @@ stage3_vis = true
 local tails = createCharacter{ x = 100, y = 50, maxSpeed = 200 }
 tails.idle = fast.getImage(spritesFolder .. "tails/idle.png")
 tails.down = fast.getImage(spritesFolder .. "tails/down.png")
+tails.fall = fast.getImage(spritesFolder .. "tails/fall.png")
 tails.up = fast.getImage(spritesFolder .. "tails/up.png")
 tails.walk = loadFrames(spritesFolder .. "tails/walking/", 8)
 tails.jump = loadFrames(spritesFolder .. "tails/jump/", 3)
 tails.run = loadFrames(spritesFolder .. "tails/run/", 2)
+tails.damage = loadFrames(spritesFolder .. "tails/damage/", 2)
 
 local knuckles = createCharacter{ x = 100, y = 50, maxSpeed = 200 }
 knuckles.idle = fast.getImage(spritesFolder .. "knuckles/idle.png")
@@ -793,10 +796,12 @@ function test_update(dt, char, map)
 
     local moveRight, moveLeft, jump, lookUp, lookDown = getControls()
     local inputDir = quantize((moveRight and 1 or 0) - (moveLeft and 1 or 0))
+    local isDemoWithPhysics = (char == sonic_demoexe) and (sonic_demoexe.physics_enabled == true)
 
     if tail_tails and tail_tails.idle then
         updateSprite(dt * 0.5, tail_tails.idle, tail_tails)
     end
+
     snapToGround(char, map, dt)
     local grounded = char.grounded
 
@@ -812,68 +817,79 @@ function test_update(dt, char, map)
         char._jumpBuf = math.max(0, char._jumpBuf - dt)
     end
 
-    if char ~= sonic_demoexe then
-        if grounded and (lookUp or lookDown) then
-            vx = 0
-            if lookUp then char.currentSprite = char.up or char.idle
-            elseif lookDown then char.currentSprite = char.down or char.idle
-            end
-            char.angle = 0
-            char.fakeAngle = 0
-        elseif moveRight or moveLeft then
-            char.direction = moveRight and 1 or -1
-            local accel = char.acceleration or 600
-            local maxS = char.maxSpeed or 200
-            vx = vx + accel * inputDir * dt
-            vx = clamp(vx, -maxS, maxS)
+    if char == sonic_demoexe and isDemoWithPhysics and gamestate == "hs" then
+        if char.grounded then
+            vx = vx * (1 - (char.groundFriction or GROUND_FRICTION))
+            if math.abs(vx) < 0.1 then vx = 0 end
         else
-            if grounded then
-                vx = vx * (1 - GROUND_FRICTION)
-                if math.abs(vx) < 0.1 then
-                    vx = 0
+            vx = vx * AIR_DRAG
+        end
+        if not char.grounded then
+            vy = vy + ((char.jumping and 625) or 400) * dt
+        end
+    else
+        if char ~= sonic_demoexe then
+            if grounded and (lookUp or lookDown) then
+                vx = 0
+                if lookUp then char.currentSprite = char.up or char.idle
+                elseif lookDown then char.currentSprite = char.down or char.idle
                 end
-            else
-                vx = vx * AIR_DRAG
-            end
-            if math.abs(vx) == 0 and not char.jumping then
-                char.currentSprite = char.idle
                 char.angle = 0
                 char.fakeAngle = 0
-            end
-        end
-        if jump and grounded then
-            vy = char.jumpHeight or -300
-            char.angle = 0
-            char.fakeAngle = 0
-            if char.jump then updateSprite(dt, char.jump, char) end
-            char.jumping = true
-            char.grounded = false
-            if sounds and sounds.jump_sound then sounds.jump_sound:play() end
-        end
-
-        local absVx = math.abs(vx)
-        if char.jumping then
-            if char.jump then updateSprite(dt, char.jump, char) end
-        elseif char.grounded and lookUp and vx == 0 then
-            char.currentSprite = char.up or char.idle
-        elseif char.grounded and lookDown and vx == 0 then
-            char.currentSprite = char.down or char.idle
-        elseif absVx >= (char.runThreshold or 175) then
-            if char.run then updateSprite(dt, char.run, char) end
-        elseif absVx > 0 then
-            local speedScale = (absVx / (char.maxSpeed or 200)) + 0.3
-            if char.walk then updateSprite(dt * speedScale, char.walk, char) end
-        else
-            if lookUp and vx == 0 then
-                char.currentSprite = char.up or char.idle
-            elseif lookDown and vx == 0 then
-                char.currentSprite = char.down or char.idle
+            elseif moveRight or moveLeft then
+                char.direction = moveRight and 1 or -1
+                local accel = char.acceleration or 600
+                local maxS = char.maxSpeed or 200
+                vx = vx + accel * inputDir * dt
+                vx = clamp(vx, -maxS, maxS)
             else
-                char.currentSprite = char.idle
+                if grounded then
+                    vx = vx * (1 - GROUND_FRICTION)
+                    if math.abs(vx) < 0.1 then
+                        vx = 0
+                    end
+                else
+                    vx = vx * AIR_DRAG
+                end
+                if math.abs(vx) == 0 and not char.jumping then
+                    char.currentSprite = char.idle
+                    char.angle = 0
+                    char.fakeAngle = 0
+                end
+            end
+            if jump and grounded then
+                vy = char.jumpHeight or -300
+                char.angle = 0
+                char.fakeAngle = 0
+                if char.jump then updateSprite(dt, char.jump, char) end
+                char.jumping = true
+                char.grounded = false
+                if sounds and sounds.jump_sound then sounds.jump_sound:play() end
+            end
+
+            local absVx = math.abs(vx)
+            if char.jumping then
+                if char.jump then updateSprite(dt, char.jump, char) end
+            elseif char.grounded and lookUp and vx == 0 then
+                char.currentSprite = char.up or char.idle
+            elseif char.grounded and lookDown and vx == 0 then
+                char.currentSprite = char.down or char.idle
+            elseif absVx >= (char.runThreshold or 175) then
+                if char.run then updateSprite(dt, char.run, char) end
+            elseif absVx > 0 then
+                local speedScale = (absVx / (char.maxSpeed or 200)) + 0.3
+                if char.walk then updateSprite(dt * speedScale, char.walk, char) end
+            else
+                if lookUp and vx == 0 then
+                    char.currentSprite = char.up or char.idle
+                elseif lookDown and vx == 0 then
+                    char.currentSprite = char.down or char.idle
+                else
+                    char.currentSprite = char.idle
+                end
             end
         end
     end
-
     if (char._jumpBuf > 0 and char._coyote > 0 and not char.jumping) then
         vy = char.jumpHeight or -300
         char.jumping = true
@@ -882,7 +898,6 @@ function test_update(dt, char, map)
         if char.jump then updateSprite(dt, char.jump, char) end
         if sounds and sounds.jump_sound then sounds.jump_sound:play() end
     end
-
     if not char.grounded then
         vy = vy + (char.jumping and 625 or 400) * dt
         vx = vx * AIR_DRAG
@@ -932,6 +947,7 @@ local hs_timer = 7
 local hs_totalTime = 0
 local tails_hiding = false
 local tails_caught = false
+local tails_caught2 = false
 local bushes_destroyed = false
 local hide_sound_played = false
 local bushes = {
@@ -1000,6 +1016,7 @@ local function handleBounce(knuck, demo, dt)
             sounds.bossMusic:stop()
             bossfightActive = false
             bossfightTimer = 0
+            eggman_lock = true
         end
     end
 end
@@ -1019,16 +1036,23 @@ function knuck_up(dt)
         stage2_vis = false
         knuck_bg = knuck_bg2
         demo_vis = true
-    elseif knuckles.x >= 5350 then
+    end
+    if knuckles.x >= 5350 then
         stage3_vis = false
         knuck_bg = knuck_bg3
-    elseif knuckles.x > 5990 then
-        idk_fix = true
     end
-
     if knuckles.x > 5990 then
         waiting_knuck = waiting_knuck + dt
 
+        local targetCamX = map2.width - base_width
+        local camSpeed = 950
+        if camera.x < targetCamX then
+            camera.x = math.min(camera.x + camSpeed * dt, targetCamX)
+        else
+            camera.x = math.max(camera.x - camSpeed * dt, targetCamX)
+        end
+
+        idk_fix = true
         if waiting_knuck >= 2 and not bossfightActive and not blackScreen then
             sounds.bossMusic:play()
             bossfightActive = true
@@ -1052,36 +1076,30 @@ function knuck_up(dt)
                 blackScreen = false
                 knuckles_alive = false
                 knuckles_lock = false
+                eggman_lock = true
                 gamestate = "selection"
             end
             return
         end
 
         if bossfightActive then
+            sonic_demoexe.physics_enabled = true
             if sonic_demoexe.x > 6484 then
                 sonic_demoexe.direction = -1
             elseif sonic_demoexe.x < 5993 then
                 sonic_demoexe.direction = 1
             end
-
             if math.random() < 0.002 then
-                if knuckles.x > sonic_demoexe.x then
-                    sonic_demoexe.direction = 1
-                else
-                    sonic_demoexe.direction = -1
-                end
+                sonic_demoexe.direction = (knuckles.x > sonic_demoexe.x) and 1 or -1
             end
-
             if sonic_demoexe.direction ~= previousDirection then
                 demo_speed = math.random(375, 400)
                 previousDirection = sonic_demoexe.direction
             end
-
-            if not demo_speed then demo_speed = 380 end
+            demo_speed = demo_speed or 380
 
             local accel = 800
             local targetSpeed = demo_speed * sonic_demoexe.direction
-
             jumpTimer = jumpTimer + dt
             if jumpTimer >= jumpInterval and not sonic_demoexe.jumping then
                 jumpTimer = 0
@@ -1093,13 +1111,11 @@ function knuck_up(dt)
             end
 
             handleBounce(knuckles, sonic_demoexe, dt)
-
             if sonic_demoexe.velocity.x < targetSpeed then
                 sonic_demoexe.velocity.x = math.min(sonic_demoexe.velocity.x + accel * dt, targetSpeed)
             elseif sonic_demoexe.velocity.x > targetSpeed then
                 sonic_demoexe.velocity.x = math.max(sonic_demoexe.velocity.x - accel * dt, targetSpeed)
             end
-
             if sonic_demoexe.currentSprite == sonic_demoexe.fall[1] then
                 updateSprite(dt, sonic_demoexe.fall, sonic_demoexe)
             elseif sonic_demoexe.jumping then
@@ -1109,10 +1125,10 @@ function knuck_up(dt)
             else
                 updateSprite(dt, sonic_demoexe.run, sonic_demoexe)
             end
+
             if sonic_demoexe.grounded then
                 sonic_demoexe.jumping = false
             end
-
             if sonic_demoexe.x < 5991 then
                 sonic_demoexe.x = 5991
                 sonic_demoexe.velocity.x = math.max(0, sonic_demoexe.velocity.x)
@@ -1180,6 +1196,7 @@ end
 local lights_off_played = false
 function hide_and_seek(dt)
     hs_totalTime = hs_totalTime + dt
+
     if (hs_totalTime >= 45 or hs_timer <= 0) and not bushes_destroyed then
         bushes = {}
         bushes_destroyed = true
@@ -1192,45 +1209,48 @@ function hide_and_seek(dt)
             flashScreen(0.54)
         end
     end
-
     local moveRight, moveLeft, jump, lookUp, lookDown = getControls()
     tails_hiding = false
     for _, bush in ipairs(bushes) do
         if tails.x > bush.x and tails.x < bush.x + bush_img:getWidth() and
-           tails.y > bush.y and tails.y < bush.y + bush_img:getHeight() and
-           lookDown then
+           tails.y > bush.y and tails.y < bush.y + bush_img:getHeight() and lookDown then
             tails_hiding = true
             break
         end
     end
-
     if tails_caught then
-        sonic_demoexe.velocity.y = 0
-        sonic_demoexe.grounded = true
-
+        test_update(dt, sonic_demoexe, map1)
+        tails.velocity.x = 0
         tails.velocity.y = tails.velocity.y + gravity * dt
         local nextTailY = tails.y + tails.velocity.y * dt
-
         if not checkCollision(tails, map1, tails.x, nextTailY) then
             tails.y = nextTailY
             tails.grounded = false
+            updateSprite(dt, tails.damage, tails)
         else
             tails.y = nextTailY
             tails.velocity.y = 0
             tails.grounded = true
+            tails.currentSprite = tails.fall
         end
-
-        updateSprite(dt, sonic_demoexe.kill_tails, sonic_demoexe)
-        if sonic_demoexe.spriteIndex >= #sonic_demoexe.kill_tails then
-            sonic_demoexe.spriteIndex = #sonic_demoexe.kill_tails
-            show_black_screen = true
-            sounds.flames:stop()
+        if sonic_demoexe.grounded then
+            if sonic_demoexe.kill_tails then
+                tails_caught2 = true
+                updateSprite(dt, sonic_demoexe.kill_tails, sonic_demoexe)
+                if sonic_demoexe.spriteIndex >= #sonic_demoexe.kill_tails then
+                    sonic_demoexe.spriteIndex = #sonic_demoexe.kill_tails
+                    show_black_screen = true
+                    gravity = 625
+                end
+            end
+        else
+            if sonic_demoexe.fall then
+                updateSprite(dt, sonic_demoexe.fall, sonic_demoexe)
+            end
         end
         return
     end
-
     updateSprite(dt * 0.6, fire_bg.idle, fire_bg)
-
     if tails_hiding then
         hs_timer = 12
         if not hide_sound_played then
@@ -1239,52 +1259,36 @@ function hide_and_seek(dt)
         end
     else
         if hs_totalTime >= 3 then
-        hs_timer = hs_timer - dt
+            hs_timer = hs_timer - dt
         end
         hide_sound_played = false
     end
-
-    if hs_timer <= 0 then
-        if sonic_demoexe.grounded then
-            updateSprite(dt, sonic_demoexe.float, sonic_demoexe)
-        end
-
-        if math.abs(tails.y - sonic_demoexe.y) > 50 then
-            sonic_demoexe.velocity.y = sonic_demoexe.jumpHeight
-            updateSprite(dt, sonic_demoexe.fly, sonic_demoexe)
-        end
-
+    if hs_timer <= 0 and not tails_caught then
+        gravity = 1250
         local dx = tails.x - sonic_demoexe.x
-
+        local dy = tails.y - sonic_demoexe.y
         if dx ~= 0 then
             sonic_demoexe.x = sonic_demoexe.x + (dx / math.abs(dx)) * 542 * dt
         end
-
-        local dy = tails.y - sonic_demoexe.y
         local verticalSpeed = 305
         local deadzone = 10
-
         if math.abs(dy) > deadzone then
             sonic_demoexe.y = sonic_demoexe.y + (dy / math.abs(dy)) * verticalSpeed * dt
         end
-
-        if tails.x > sonic_demoexe.x then
-            sonic_demoexe.direction = 1
-        else
-            sonic_demoexe.direction = -1
+        sonic_demoexe.direction = (dx > 0) and 1 or -1
+        if not sonic_demoexe.grounded and sonic_demoexe.fly then
+            updateSprite(dt, sonic_demoexe.fly, sonic_demoexe)
+        elseif sonic_demoexe.grounded and sonic_demoexe.float then
+            updateSprite(dt, sonic_demoexe.float, sonic_demoexe)
         end
-
-        if not tails_hiding and
-           math.abs(tails.x - sonic_demoexe.x) < 32 and
-           math.abs(tails.y - sonic_demoexe.y) < 32 then
-            if not tails_caught then
-                tails_caught = true
-                tails_caught_timer = 0
-                tails.currentSprite = nil
-                tails.velocity.x, tails.velocity.y = 0, 0
-                sonic_demoexe.spriteIndex = 1
-                sonic_demoexe.velocity.x, sonic_demoexe.velocity.y = 0, 0
-            end
+        if math.abs(tails.x - sonic_demoexe.x) < 32 and math.abs(tails.y - sonic_demoexe.y) < 32 then
+            tails_caught = true
+            sonic_demoexe.physics_enabled = true
+            sonic_demoexe.catching_tails = true
+            sonic_demoexe.velocity.x, sonic_demoexe.velocity.y = 0, -245
+            tails.caught_by_demo = true
+            tails.velocity.x, tails.velocity.y = 0, 0
+            tails.currentSprite = tails.fall
         end
     end
 end
@@ -2293,7 +2297,7 @@ function love.draw()
         love.graphics.translate(-math.floor(camera.x + 0.5), -math.floor(camera.y + 0.5))
         love.graphics.draw(test3, 0, 0)
 
-        if not tails_caught and tails.currentSprite then
+        if not tails_caught2 and tails.currentSprite then
             tails_tail_thing()
             char_draw(tails, 0, 2)
         end
