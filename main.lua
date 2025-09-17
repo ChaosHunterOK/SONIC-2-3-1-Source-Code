@@ -2,14 +2,76 @@ local love = require("love")
 local fast = require("fast")
 fast.fpsCap = 60
 
+local buttons = {"Copy", "Quit"}
+local selected = 1
+local errorMessage = ""
+love.graphics.setDefaultFilter("nearest", "nearest")
+
+Font = fast.getFont("font/font.ttf", 16)
+FontBig = fast.getFont("font/font.ttf", 32)
+
+function love.errhand(msg)
+    love.graphics.reset()
+    love.graphics.setFont(Font)
+    errorMessage = tostring(msg)
+    image = love.graphics.newImage("images/error.png")
+    image:setFilter("nearest", "nearest")
+
+    while true do
+        love.event.pump()
+        for e,a,b,c,d in love.event.poll() do
+            if e == "quit" then
+                return
+            elseif e == "keypressed" then
+                if a == "right" then
+                    selected = selected + 1
+                    if selected > #buttons then selected = 1 end
+                elseif a == "left" then
+                    selected = selected - 1
+                    if selected < 1 then selected = #buttons end
+                elseif a == "return" or a == "kpenter" then
+                    if buttons[selected] == "Copy" then
+                        love.system.setClipboardText(errorMessage)
+                    elseif buttons[selected] == "Quit" then
+                        return
+                    end
+                end
+            end
+        end
+
+        love.graphics.setColor(1,1,1)
+        if image then
+            love.graphics.setDefaultFilter("nearest", "nearest")
+            love.graphics.draw(image, 0, 0, 0, 2, 2)
+        end
+
+        local xOffset = 550
+        love.graphics.printf(errorMessage, xOffset, 100, love.graphics.getWidth() - xOffset - 50, "left")
+        local btnY = love.graphics.getHeight() - 100
+        local btnX = xOffset
+        love.graphics.printf("DM copilucusarmale on Discord to report this goofy error", xOffset, 35, love.graphics.getWidth() - xOffset - 50, "left")
+        for i,btn in ipairs(buttons) do
+            if i == selected then
+                love.graphics.setColor(1,0.5,0)
+            else
+                love.graphics.setColor(1,1,1)
+            end
+            love.graphics.print(btn, btnX, btnY)
+            btnX = btnX + 100
+        end
+
+        love.graphics.present()
+        love.timer.sleep(0.01)
+    end
+end
+
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
-love.graphics.setDefaultFilter("nearest", "nearest")
 
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "menuscreen"
+local gamestate = "test"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -79,9 +141,6 @@ local mapImages = {
 }
 
 lockImg = fast.getImage("images/lock.png")
-
-Font = fast.getFont("font/font.ttf", 16)
-FontBig = fast.getFont("font/font.ttf", 32)
 
 local soundDefs = {
     sonic_theme = "music/sonic_theme.ogg",
