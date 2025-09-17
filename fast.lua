@@ -6,13 +6,17 @@ local fast = {
     cache = {
         images = {},
         fonts = {},
-        sounds = {}
+        sounds = {},
+        frames = {}
     },
     vsync = true,
     fpsCap = 0,
     _lastTime = lt.getTime(),
     _soundPool = {},
-    _polyBuffer = {}
+    _polyBuffer = {},
+    _polyBufferSize = 0,
+    maxSoundPool = 8,
+    _gcTimer = 0
 }
 
 local images = fast.cache.images
@@ -21,7 +25,7 @@ function fast.getImage(path, filter)
     if not img then
         img = lg.newImage(path)
         local f = filter or "nearest"
-        img:setFilter(f,f)
+        img:setFilter(f, f)
         images[path] = img
     end
     return img
@@ -43,73 +47,80 @@ function fast.getSound(path, type)
     type = type or "static"
     local pool = fast._soundPool[path]
     if not pool then
-        local s = sounds[path]
-        if not s then
-            s = la.newSource(path, type)
-            sounds[path] = s
-        end
+        local s = sounds[path] or la.newSource(path, type)
+        sounds[path] = s
         pool = {s}
         fast._soundPool[path] = pool
         return s
     end
     for i=1,#pool do
-        if pool[i]:isStopped() then
+        if not pool[i]:isPlaying() then
             return pool[i]
         end
     end
-    local newS = sounds[path]:clone()
-    pool[#pool+1] = newS
-    return newS
-end
-
-function fast.randomColor(a)
-    local r,g,b = random(), random(), random()
-    return r,g,b,a or 1
-end
-
-function fast.hexColor(hex, a)
-    hex = hex:gsub("#","")
-    local r = tonumber(hex:sub(1,2),16)/255
-    local g = tonumber(hex:sub(3,4),16)/255
-    local b = tonumber(hex:sub(5,6),16)/255
-    return r,g,b,a or 1
-end
-
-function fast.drawPolygon(verts, color, alpha, mode)
-    local pts = fast._polyBuffer
-    local k = 1
-    for i = 1, #verts do
-        local v = verts[i]
-        pts[k], pts[k+1] = v[1], v[2]
-        k = k + 2
-    end
-
-    if color then
-        lg.setColor(color[1], color[2], color[3], (color[4] or 1) * (alpha or 1))
+    if #pool < fast.maxSoundPool then
+        local newS = sounds[path]:clone()
+        pool[#pool+1] = newS
+        return newS
     else
-        lg.setColor(1, 1, 1, alpha or 1)
+        return pool[1]
     end
-    lg.polygon(mode or "fill", unpack(pts, 1, k-1))
 end
 
---fast.draw is kinda useless, might get updated soon, will get to that later
-function fast.draw(obj, x, y, r, sx, sy, ox, oy, kx, ky)
-    if not r and not sx and not sy and not ox and not oy and not kx and not ky then
-        lg.draw(obj, x or 0, y or 0)
-        return
+function fast.getFrames(basePath, count)
+    if fast.cache.frames[basePath] then
+        return fast.cache.frames[basePath]
     end
-    lg.draw(
-        obj,
-        x or 0,
-        y or 0,
-        r or 0,
-        sx or 1,
-        sy or (sx or 1),
-        ox or 0,
-        oy or 0,
-        kx or 0,
-        ky or 0
-    )
+    local frames = {}
+    if count then
+        for i=1, count do
+            frames[i] = fast.getImage(basePath .. i .. ".png")
+        end
+    else
+        local files = love.filesystem.getDirectoryItems(basePath)
+        table.sort(files)
+        for _, file in ipairs(files) do
+            if file:sub(-4):lower() == ".png" then
+                frames[#frames+1] = fast.getImage(basePath .. file)
+            end
+        end
+    end
+    fast.cache.frames[basePath] = frames
+    return frames
+end
+
+function fast.clearCache()
+    for k,v in pairs(fast.cache.images) do
+        if v and v:typeOf("Texture") then v:release() end
+        fast.cache.images[k] = nil
+    end
+    for k,v in pairs(fast.cache.fonts) do
+        fast.cache.fonts[k] = nil
+    end
+    for k,v in pairs(fast.cache.sounds) do
+        if v and v:typeOf("Source") then v:stop() end
+        fast.cache.sounds[k] = nil
+    end
+    fast.cache.frames = {}
+    fast._soundPool = {}
+    collectgarbage("collect")
+end
+
+function fast.reduceMemory(dt)
+    fast._gcTimer = fast._gcTimer + (dt or 0)
+    if fast._gcTimer >= 10 then
+        fast._gcTimer = 0
+        for path, pool in pairs(fast._soundPool) do
+            local alive = {}
+            for _, s in ipairs(pool) do
+                if s and (s:isPlaying() or #alive < fast.maxSoundPool) then
+                    table.insert(alive, s)
+                end
+            end
+            fast._soundPool[path] = alive
+        end
+        collectgarbage("collect")
+    end
 end
 
 function fast.limitFPS()
@@ -118,18 +129,10 @@ function fast.limitFPS()
         local now = lt.getTime()
         local sleepFor = target - (now - fast._lastTime)
         if sleepFor > 0 then lt.sleep(sleepFor) end
-        fast._lastTime = now
+        fast._lastTime = lt.getTime()
+    else
+        fast._lastTime = lt.getTime()
     end
-end
-
-function fast.setVsync(on)
-    fast.vsync = on and 1 or 0
-    local w,h,flags = lw.getMode()
-    lw.setMode(w,h,{vsync = fast.vsync})
-end
-
-function fast.newBatch(image, max)
-    return lg.newSpriteBatch(image, max or 2000)
 end
 
 return fast

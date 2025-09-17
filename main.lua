@@ -1,5 +1,7 @@
 local love = require("love")
 local fast = require("fast")
+fast.fpsCap = 60
+
 local ok, discord = pcall(require, "ffi/discord")
 local startTime = os.time()
 love.graphics.setDefaultFilter("nearest", "nearest")
@@ -7,7 +9,7 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "test"
+local gamestate = "menuscreen"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -17,6 +19,7 @@ end
 
 gravity = 625
 
+local floor, abs, min, max, atan2, deg = math.floor, math.abs, math.min, math.max, math.atan2, math.deg
 local base_width, base_height = 500, 250
 local thing = 650
 local camera = {x = 0, y = 0, targetX = 0, targetY = 0}
@@ -31,22 +34,21 @@ scale_factor = 1
 offset_x = 0
 offset_y = 0
 
-rebooting_Vis = false
-rebootingTimer = 0
-lastPlayedCycle = -1
+rebooting_Vis, rebootingTimer, lastPlayedCycle = false, 0, -1
 
 local ringAnimState = true
 local ringAnimTimer = 0
 local ringAnimSpeed = 0.2
 local characterOffsetX = 0
 
-local tails_alive = true
-local knuckles_alive = true
-local eggman_alive = true
-
-local tails_lock = true
-local knuckles_lock = false
-local eggman_lock = false
+local charStatus = {
+    tails_alive = true,
+    knuckles_alive = true,
+    eggman_alive = true,
+    tails_lock = true,
+    knuckles_lock = false,
+    eggman_lock = false
+}
 
 local idk_img = fast.getImage("images/idk.png")
 local chase_img = fast.getImage("images/chase.png")
@@ -57,28 +59,29 @@ knuck_bg = fast.getImage("images/background/knuck.png")
 knuck_bg2 = fast.getImage("images/background/knuck2.png")
 knuck_bg3 = fast.getImage("images/background/knuck3.png")
 
-local selection_box = fast.getImage("images/selection/box.png")
-local tails_selection = fast.getImage("images/selection/tails_selection.png")
-local knuck_selection = fast.getImage("images/selection/knuckles_selection.png")
-local eggman_selection = fast.getImage("images/selection/eggman_selection.png")
+local selectionImages = {
+    selection_box = fast.getImage("images/selection/box.png"),
+    tails_selection = fast.getImage("images/selection/tails_selection.png"),
+    knuck_selection = fast.getImage("images/selection/knuckles_selection.png"),
+    eggman_selection = fast.getImage("images/selection/eggman_selection.png"),
 
-local dead_tails = fast.getImage("images/selection/dead_tails.png")
-local dead_knuckles = fast.getImage("images/selection/dead_knuckles.png")
-local dead_eggman = fast.getImage("images/selection/dead_eggman.png")
+    dead_tails = fast.getImage("images/selection/dead_tails.png"),
+    dead_knuckles = fast.getImage("images/selection/dead_knuckles.png"),
+    dead_eggman = fast.getImage("images/selection/dead_eggman.png")
+}
 
-local test2 = fast.getImage("images/maps/test2.png")
-local test3 = fast.getImage("images/maps/map1.png")
-local knuck1 = fast.getImage("images/maps/knuck1.png")
-local gh1 = fast.getImage("images/maps/gh1.png")
-local testmap = fast.getImage("images/maps/testmap.png")
+local mapImages = {
+    test2 = fast.getImage("images/maps/test2.png"),
+    test3 = fast.getImage("images/maps/map1.png"),
+    knuck1 = fast.getImage("images/maps/knuck1.png"),
+    gh1 = fast.getImage("images/maps/gh1.png"),
+    testmap = fast.getImage("images/maps/testmap.png")
+}
 
 lockImg = fast.getImage("images/lock.png")
 
 Font = fast.getFont("font/font.ttf", 16)
 FontBig = fast.getFont("font/font.ttf", 32)
-Font2 = fast.getFont("font/sonicdebugfont.ttf", 12)
-Font3 = fast.getFont("font/sonicfont.ttf", 32)
-Font4 = fast.getFont("font/font2.ttf", 16)
 
 local soundDefs = {
     sonic_theme = "music/sonic_theme.ogg",
@@ -90,15 +93,14 @@ local soundDefs = {
     denySound = "sounds/deny.ogg",
     hitStaticSound = "sounds/hitStatic.ogg",
     enterSound = "sounds/enter.ogg",
-    walking_on_metalSound = "sounds/walking_on_metal.mp3",
+    cr4sh_sound = "sounds/cr4sh_sound.mp3",
+    sound_fix = "sounds/sound_fix.mp3",
     reboot_old = "sounds/reboot_old.ogg",
-    metalSound = "sounds/metal.ogg",
     bossMusic = "music/Demo_fight.mp3",
     tails_stage = "music/tails_stage.ogg",
     demo_song = "music/demo_song.ogg",
     glitch_sound = "sounds/glitch_sound.mp3",
     jump_sound = "sounds/jump_sound.mp3",
-    torture_sound = "sounds/torture.mp3",
     laugh_sound = "sounds/laugh.mp3",
     S3K_9A = "sounds/S3K_9A.wav",
     lights_off = "sounds/lights-sound-effect.mp3",
@@ -109,7 +111,7 @@ local soundDefs = {
 local sounds = {}
 
 for name, path in pairs(soundDefs) do
-    sounds[name] = fast.getSound(path, "static")
+    sounds[name] = love.audio.newSource(path, (path:find("music") and "stream") or "static")
 end
 
 local images = {}
@@ -118,26 +120,35 @@ selectionState = "tails"
 selectionIndex = 1
 selectionOptions = {"tails", "knuckles", "eggman"}
 
+local mapFiles = {
+    map = "images/maps/test.png",
+    map1 = "images/maps/map2.png",
+    map2 = "images/maps/knuck2.png",
+    map3 = "images/maps/gh2.png",
+    testmap2 = "images/maps/testmap.png"
+}
+
+local maps = {}
+function getMap(name)
+    if not maps[name] then
+        maps[name] = loadMap(mapFiles[name])
+    end
+    return maps[name]
+end
+
 function loadMap(path)
-    local img = love.graphics.newImage(path)
+    local img = fast.getImage(path)
     local imageData = love.image.newImageData(path)
     local w, h = imageData:getDimensions()
     local collision = {}
-
+    collision.width, collision.height = w, h
     imageData:mapPixel(function(x, y, r, g, b, a)
-        collision[y] = collision[y] or {}
-        collision[y][x] = a > 0.1
-        return r,g,b,a
+        collision[y * w + x + 1] = a > 0.1
+        return r, g, b, a
     end)
-
-    return {image=img, collision=collision, width=w, height=h}
+    imageData:release()
+    return {image = img, collision = collision, width = w, height = h}
 end
-
-map = loadMap("images/maps/test.png")
-map1 = loadMap("images/maps/map2.png")
-map2 = loadMap("images/maps/knuck2.png")
-map3 = loadMap("images/maps/gh2.png")
-testmap2 = loadMap("images/maps/testmap.png")
 
 local function createCharacter(opts)
     opts = opts or {}
@@ -166,18 +177,31 @@ local function createCharacter(opts)
         targetX = 0,
         targetY = 0,
         fakeAngle = 0,
-        physics_enabled = true
+        physics_enabled = false
     }
+end
+
+local function loadFrames(basePath, count)
+    return fast.getFrames(basePath, count)
 end
 
 local chunkSize, renderDistance = 4, 24
 leftwImage = fast.getImage("images/arrows/leftw.png")
 rightwImage = fast.getImage("images/arrows/rightw.png")
 
-flashAlpha = 0
-flashDuration = 0.5
-flashTimer = 0
+flashAlpha, flashDuration, flashTimer = 0, 0.5, 0
 local isFlashing = false
+local function initCharacterSprite(character, defaultSprite)
+    character.currentSprite = defaultSprite
+    character.spriteIndex = 1
+    return character
+end
+
+local function initArraySprite(character, spriteArray)
+    character.spriteIndex = 1
+    character.currentSprite = spriteArray[1]
+    return character
+end
 
 function flashScreen(duration)
     flashAlpha = 1
@@ -186,23 +210,8 @@ function flashScreen(duration)
     isFlashing = true
 end
 
-local function loadFrames(basePath, count)
-    local frames = {}
-    for i = 1, count do
-        frames[i] = fast.getImage(basePath .. i .. ".png")
-    end
-    return frames
-end
-
-transitionAlpha = 1
-transitioning = false
-transitionTarget = ""
-transitionSpeed = 1.5
-
-colorPhaseTime = 0.25
-colorTimer = 0
-colorLerp = 0
-
+transitionAlpha, transitioning, transitionTarget, transitionSpeed = 1, false, "", 1.5
+colorPhaseTime, colorTimer, colorLerp = 0.25, 0, 0
 function startTransition(target)
     transitioning = true
     transitionTarget = target
@@ -212,60 +221,11 @@ end
 
 stage1 = fast.getImage(spritesFolder.."sonic_demo.exe/anim/knuckles/stage1.png")
 stage1_vis = true
-local s1 = createCharacter{x = 100, y = 50}
+s1 = createCharacter{x = 100, y = 50}
 s1.stage2 = loadFrames(spritesFolder .. "sonic_demo.exe/anim/knuckles/stage2/", 2)
 stage2_vis = true
 stage3 = fast.getImage(spritesFolder.."sonic_demo.exe/anim/knuckles/stage3.png")
 stage3_vis = true
-
-local tails = createCharacter{ x = 100, y = 50, maxSpeed = 200 }
-tails.idle = fast.getImage(spritesFolder .. "tails/idle.png")
-tails.down = fast.getImage(spritesFolder .. "tails/down.png")
-tails.fall = fast.getImage(spritesFolder .. "tails/fall.png")
-tails.up = fast.getImage(spritesFolder .. "tails/up.png")
-tails.walk = loadFrames(spritesFolder .. "tails/walking/", 8)
-tails.jump = loadFrames(spritesFolder .. "tails/jump/", 3)
-tails.run = loadFrames(spritesFolder .. "tails/run/", 2)
-tails.damage = loadFrames(spritesFolder .. "tails/damage/", 2)
-
-local knuckles = createCharacter{ x = 100, y = 50, maxSpeed = 200 }
-knuckles.idle = fast.getImage(spritesFolder .. "knuckles/idle.png")
-knuckles.walk = loadFrames(spritesFolder .. "knuckles/walking/", 7)
-knuckles.run = loadFrames(spritesFolder .. "knuckles/run/", 4)
-knuckles.jump = loadFrames(spritesFolder .. "knuckles/jump/", 5)
-knuckles.wait = loadFrames(spritesFolder .. "knuckles/confused/", 2)
-
-local eggman = createCharacter{ x = 3300, y = 50, maxSpeed = 140 }
-eggman.idle = fast.getImage(spritesFolder .. "eggman/idle.png")
-eggman.down = fast.getImage(spritesFolder .. "eggman/down.png")
-eggman.walk = loadFrames(spritesFolder .. "eggman/walking/", 3)
-eggman.run = loadFrames(spritesFolder .. "eggman/walking/", 3)
-eggman.jump = loadFrames(spritesFolder .. "eggman/walking/", 1)
-
-local sonic_demoexe = createCharacter{x = -100, y = -140 }
-sonic_demoexe.idle = fast.getImage(spritesFolder .. "sonic_demo.exe/idle.png")
-sonic_demoexe.crouch = fast.getImage(spritesFolder .. "sonic_demo.exe/crouch.png")
-sonic_demoexe.anim_tails = loadFrames(spritesFolder .. "sonic_demo.exe/anim/tails/", 8)
-sonic_demoexe.float = loadFrames(spritesFolder .. "sonic_demo.exe/float/", 2)
-sonic_demoexe.jump = loadFrames(spritesFolder .. "sonic_demo.exe/jump/", 5)
-sonic_demoexe.run = loadFrames(spritesFolder .. "sonic_demo.exe/run/", 4)
-sonic_demoexe.walk = loadFrames(spritesFolder .. "sonic_demo.exe/walk/", 6)
-sonic_demoexe.fly = loadFrames(spritesFolder .. "sonic_demo.exe/fly/fly", 2)
-sonic_demoexe.fall = loadFrames(spritesFolder .. "sonic_demo.exe/fall/", 2)
-sonic_demoexe.kill_tails = loadFrames(spritesFolder .. "sonic_demo.exe/kill/test/", 7)
-
-test_character = createCharacter{x = -100, y = -140, maxSpeed = 200 }
-test_character.idle = fast.getImage(spritesFolder .. "sonic_demo.exe/idle.png")
-test_character.run = loadFrames(spritesFolder .. "sonic_demo.exe/run/", 4)
-test_character.walk = loadFrames(spritesFolder .. "sonic_demo.exe/walk/", 6)
-test_character.jump = loadFrames(spritesFolder .. "sonic_demo.exe/jump/", 5)
-
-local fire_bg = createCharacter{}
-fire_bg.idle = loadFrames("images/background/fire/", 3)
-
-local sonic_demoexe_screen = createCharacter{x = 0, y = 355}
-sonic_demoexe_screen.idle = fast.getImage(spritesFolder .. "screen/idle_new.png")
-sonic_demoexe_screen.grab = loadFrames(spritesFolder .. "screen/grab/", 5)
 
 local tail_tails = {
     x = 100,
@@ -275,7 +235,7 @@ local tail_tails = {
 }
 tail_tails.idle = loadFrames(spritesFolder .. "tail/", 5)
 
-local menuShrink = 1
+menuShrink = 1
 local menuAlpha = 1
 local shrinkingMenu = false
 local selectionScale = 3
@@ -289,26 +249,8 @@ local splash_frames = {}
 splash_frames.splash = loadFrames(spritesFolder .. "menuscreen/splash2/", 13)
 splash_frames.idle = loadFrames(spritesFolder .. "menuscreen/play/", 6)
 
-function initCharacterSprite(character, defaultSprite)
-    character.currentSprite = defaultSprite
-    character.spriteIndex = 1
-    return character
-end
-
-function initArraySprite(character, spriteArray)
-    character.spriteIndex = 1
-    character.currentSprite = spriteArray[math.floor(character.spriteIndex)]
-    return character
-end
-
-tails = initCharacterSprite(tails, tails.idle)
-knuckles = initCharacterSprite(knuckles, knuckles.idle)
-eggman = initCharacterSprite(eggman, eggman.idle)
-tail_tails = initArraySprite(tail_tails, tail_tails.idle)
-sonic_demoexe = initCharacterSprite(sonic_demoexe, sonic_demoexe.idle)
-test_character = initCharacterSprite(test_character, test_character.idle)
-sonic_demoexe_screen = initCharacterSprite(sonic_demoexe_screen, sonic_demoexe_screen.idle)
-s1 = initArraySprite(s1, s1.stage2)
+local fire_bg = createCharacter{}
+fire_bg.idle = loadFrames("images/background/fire/", 3)
 
 title = fast.getImage(spritesFolder .. "menuscreen/title.png")
 circle = fast.getImage(spritesFolder .. "menuscreen/circle.png")
@@ -319,22 +261,23 @@ local colorTR = {0xA2/255, 0xA0/255, 0x20/255, 1}
 
 local targetYaw, targetPitch = 0, 0
 
-local function createBaseplate(w, d)
-    local tiles, idx = {}, 0
-    for z = 0, d - 1 do
-        local zPos = z
-        for x = 0, w - 1 do
+local function createBaseplate(width, depth)
+    local tiles = {}
+    local idx = 1
+
+    for z = 0, depth - 1 do
+        for x = 0, width - 1 do
             local col = ((x + z) % 2 == 0) and colorTL or colorTR
-            idx = idx + 1
-            local xPos = x
             tiles[idx] = {
-                {xPos, 0, zPos,col},
-                {xPos + 1, 0, zPos, col},
-                {xPos + 1, 0, zPos + 1, col},
-                {xPos, 0, zPos + 1, col}
+                {x, 0, z, col},
+                {x + 1, 0, z, col},
+                {x + 1, 0, z + 1, col},
+                {x, 0, z + 1, col}
             }
+            idx = idx + 1
         end
     end
+
     return tiles
 end
 
@@ -365,6 +308,64 @@ joystickBaseImage = fast.getImage("images/mobile_stuff/base.png")
 joystickKnobImage = fast.getImage("images/mobile_stuff/knob.png")
 jumpButtonImage = fast.getImage("images/mobile_stuff/jump.png")
 
+local tails = createCharacter{ x = 100, y = 50, maxSpeed = 200 }
+tails.idle = fast.getImage(spritesFolder .. "tails/idle.png")
+tails.down = fast.getImage(spritesFolder .. "tails/down.png")
+tails.fall = fast.getImage(spritesFolder .. "tails/fall.png")
+tails.up = fast.getImage(spritesFolder .. "tails/up.png")
+tails.walk = loadFrames(spritesFolder .. "tails/walking/", 8)
+tails.jump = loadFrames(spritesFolder .. "tails/jump/", 3)
+tails.run = loadFrames(spritesFolder .. "tails/run/", 2)
+tails.damage = loadFrames(spritesFolder .. "tails/damage/", 2)
+tails = initCharacterSprite(tails, tails.idle)
+
+local knuckles = createCharacter{ x = 100, y = 50, maxSpeed = 10000 }
+knuckles.idle = fast.getImage(spritesFolder .. "knuckles/idle.png")
+knuckles.walk = loadFrames(spritesFolder .. "knuckles/walking/", 7)
+knuckles.run = loadFrames(spritesFolder .. "knuckles/run/", 4)
+knuckles.jump = loadFrames(spritesFolder .. "knuckles/jump/", 5)
+knuckles = initCharacterSprite(knuckles, knuckles.idle)
+
+local eggman = createCharacter{ x = 3300, y = 50, maxSpeed = 140 }
+eggman.idle = fast.getImage(spritesFolder .. "eggman/idle.png")
+eggman.down = fast.getImage(spritesFolder .. "eggman/down.png")
+eggman.walk = loadFrames(spritesFolder .. "eggman/walking/", 3)
+eggman.run = loadFrames(spritesFolder .. "eggman/walking/", 3)
+eggman.jump = loadFrames(spritesFolder .. "eggman/walking/", 1)
+eggman.crashed = fast.getImage(spritesFolder.."eggman/crashed.png")
+eggman = initCharacterSprite(eggman, eggman.idle)
+
+local sonic_demoexe = createCharacter{x = -100, y = -140 }
+sonic_demoexe.idle = fast.getImage(spritesFolder .. "sonic_demo.exe/idle.png")
+sonic_demoexe.crouch = fast.getImage(spritesFolder .. "sonic_demo.exe/crouch.png")
+sonic_demoexe.anim_tails = loadFrames(spritesFolder .. "sonic_demo.exe/anim/tails/", 8)
+sonic_demoexe.float = loadFrames(spritesFolder .. "sonic_demo.exe/float/", 2)
+sonic_demoexe.jump = loadFrames(spritesFolder .. "sonic_demo.exe/jump/", 5)
+sonic_demoexe.run = loadFrames(spritesFolder .. "sonic_demo.exe/run/", 4)
+sonic_demoexe.walk = loadFrames(spritesFolder .. "sonic_demo.exe/walk/", 6)
+sonic_demoexe.fly = loadFrames(spritesFolder .. "sonic_demo.exe/fly/fly", 2)
+sonic_demoexe.fall = loadFrames(spritesFolder .. "sonic_demo.exe/fall/", 2)
+sonic_demoexe.kill_tails = loadFrames(spritesFolder .. "sonic_demo.exe/kill/test/", 7)
+sonic_demoexe.cr4sh = fast.getImage(spritesFolder.."sonic_demo.exe/fly/anim/cr4sh.png")
+sonic_demoexe.anim_tails = loadFrames(spritesFolder.."sonic_demo.exe/anim/tails/", 8)
+sonic_demoexe = initCharacterSprite(sonic_demoexe, sonic_demoexe.idle)
+
+test_character = createCharacter{x = -100, y = -140, maxSpeed = 200 }
+test_character.idle = fast.getImage(spritesFolder .. "sonic_demo.exe/idle.png")
+test_character.run = loadFrames(spritesFolder .. "sonic_demo.exe/run/", 4)
+test_character.walk = loadFrames(spritesFolder .. "sonic_demo.exe/walk/", 6)
+test_character.jump = loadFrames(spritesFolder .. "sonic_demo.exe/jump/", 5)
+test_character = initCharacterSprite(test_character, test_character.idle)
+
+local sonic_demoexe_screen = createCharacter{x = 0, y = 355}
+sonic_demoexe_screen.idle = fast.getImage(spritesFolder .. "screen/idle_new.png")
+sonic_demoexe_screen.grab = loadFrames(spritesFolder .. "screen/grab/", 5)
+sonic_demoexe_screen = initCharacterSprite(sonic_demoexe_screen, sonic_demoexe_screen.idle)
+
+local fire_bg = initCharacterSprite(fire_bg, fire_bg.idle)
+local tail_tails = initArraySprite(tail_tails, tail_tails.idle)
+local s1 = initArraySprite(s1, s1.stage2)
+
 function love.load()
     love.window.setMode(base_width * SCALE, base_height * SCALE, {
         fullscreen = false,
@@ -375,8 +376,8 @@ function love.load()
     love.window.setTitle("SONIC 2 3 1")
     love.window.setIcon(love.image.newImageData("images/game_icon.png"))
     canvas = love.graphics.newCanvas(base_width, base_height)
+    --if canvas then canvas:release() end
     updateCanvasScale()
-    fast.fpsCap = 60
 
     if ok and discord then
         local success, err = pcall(function()
@@ -434,7 +435,7 @@ function love.load()
     credits_y = base_height
 end
 
-function clamp(val, minVal, maxVal) return math.max(minVal, math.min(maxVal, val)) end
+function clamp(val, minVal, maxVal) return max(minVal, min(maxVal, val)) end
 function lerp(a, b, t) return a + (b - a) * t end
 
 local function dist2(a, b)
@@ -450,10 +451,10 @@ local rollReturnSpeed = 5
 
 function william_update(dt)
     local smoothSpeed = 8
-    camera_3d.yaw = camera_3d.yaw + (targetYaw - camera_3d.yaw) * math.min(dt * smoothSpeed, 1)
-    camera_3d.pitch = camera_3d.pitch + (targetPitch - camera_3d.pitch) * math.min(dt * smoothSpeed, 1)
-    camera_3d.roll = camera_3d.roll + (targetRoll - camera_3d.roll) * math.min(dt * rollReturnSpeed, 1)
-    targetRoll = targetRoll + (0 - targetRoll) * math.min(dt * rollReturnSpeed, 1)
+    camera_3d.yaw = camera_3d.yaw + (targetYaw - camera_3d.yaw) * min(dt * smoothSpeed, 1)
+    camera_3d.pitch = camera_3d.pitch + (targetPitch - camera_3d.pitch) * min(dt * smoothSpeed, 1)
+    camera_3d.roll = camera_3d.roll + (targetRoll - camera_3d.roll) * min(dt * rollReturnSpeed, 1)
+    targetRoll = targetRoll + (0 - targetRoll) * min(dt * rollReturnSpeed, 1)
     local inputX, inputZ = 0, 0
     if love.keyboard.isDown("w") then inputZ = inputZ + 1 end
     if love.keyboard.isDown("s") then inputZ = inputZ - 1 end
@@ -469,11 +470,11 @@ function william_update(dt)
         inputX, inputZ = inputX * len, inputZ * len
     end
 
-    local accel = math.min(dt * 12, 1)
+    local accel = min(dt * 12, 1)
     velX = velX + (inputX * moveSpeed - velX) * accel
     velZ = velZ + (inputZ * moveSpeed - velZ) * accel
 
-    if math.abs(velX) > 0.01 or math.abs(velZ) > 0.01 then
+    if abs(velX) > 0.01 or abs(velZ) > 0.01 then
         walkTime = walkTime + dt * 10
         bobAmount = bobAmount + ((math.sin(walkTime) * 0.1) - bobAmount) * dt * 8
     else
@@ -489,7 +490,7 @@ function william_update(dt)
     local distSq = dx*dx + dy*dy + dz*dz
     if distSq > 0.01 then
         local dist = math.sqrt(distSq)
-        local speedFactor = 1 + math.max(0, (20 - dist) / 20) * 2
+        local speedFactor = 1 + max(0, (20 - dist) / 20) * 2
         local lerpAmt = dt * 4
         local targetVx = dx / dist * chaser.speed * speedFactor
         local targetVy = dy / dist * chaser.speed * speedFactor
@@ -502,10 +503,10 @@ function william_update(dt)
         chaser.y = chaser.y + chaser.vy * dt
         chaser.z = chaser.z + chaser.vz * dt
     end
-    preloadTiles()
     if distSq < 1 then
         gamestate = "game_over"
     end
+    preloadTiles()
 end
 
 local function inRenderDistance(tile)
@@ -517,8 +518,8 @@ end
 function love.mousemoved(x, y, dx, dy)
     if gamestate == "william" then
         targetYaw = targetYaw - dx * mouseSensitivity
-        targetPitch = math.max(-math.pi/2, math.min(math.pi/2, targetPitch + dy * mouseSensitivity))
-        targetRoll = math.max(-0.15, math.min(0.15, -dx * rollStrength))
+        targetPitch = max(-math.pi/2, min(math.pi/2, targetPitch + dy * mouseSensitivity))
+        targetRoll = max(-0.15, min(0.15, -dx * rollStrength))
     end
 end
 
@@ -535,7 +536,7 @@ local function updateSprite(dt, spriteTable, char)
     if char.spriteIndex >= #spriteTable + 1 then
         char.spriteIndex = 1
     end
-    char.currentSprite = spriteTable[math.floor(char.spriteIndex)] or spriteTable[1]
+    char.currentSprite = spriteTable[floor(char.spriteIndex)] or spriteTable[1]
 end
 
 local sonic_demoexe_triggered = false
@@ -543,29 +544,32 @@ local sonic_demoexe_animating = false
 local sonic_demoexe_wait_timer = 0
 
 local currentColor = {1, 1, 1}
-local targetColor = {1, 1, 1}
 local lerpSpeed = 5
 
-local function before_idk(dt)
-    if tails.x < 10695 then
-        sonic_demoexe.currentSprite = sonic_demoexe.anim_tails[1]
+function before_idk(dt)
+    local tX = tails.x
+    local anim = sonic_demoexe.anim_tails
+    local n = #anim
+    if tX < 10695 then
+        sonic_demoexe.currentSprite = anim[1]
     end
-    if not sonic_demoexe_triggered and math.floor(tails.x) >= 10695 then
+    if not sonic_demoexe_triggered and tX >= 10695 then
         sonic_demoexe_triggered = true
         sonic_demoexe_animating = true
         sonic_demoexe.spriteIndex = 1
-        sonic_demoexe.currentSprite = sonic_demoexe.anim_tails[1]
+        sonic_demoexe.currentSprite = anim[1]
     end
     if sonic_demoexe_animating then
-        sonic_demoexe.spriteIndex = sonic_demoexe.spriteIndex + dt * 10
-        if sonic_demoexe.spriteIndex >= #sonic_demoexe.anim_tails + 1 then
-            sonic_demoexe.spriteIndex = #sonic_demoexe.anim_tails
+        local index = sonic_demoexe.spriteIndex + dt * 10
+        if index >= n then
+            index = n
             sonic_demoexe_animating = false
             sonic_demoexe_wait_timer = 0.1
-        else
-            sonic_demoexe.currentSprite = sonic_demoexe.anim_tails[math.floor(sonic_demoexe.spriteIndex)]
         end
+        sonic_demoexe.spriteIndex = index
+        sonic_demoexe.currentSprite = anim[floor(index)]
     end
+
     if sonic_demoexe_wait_timer > 0 then
         sonic_demoexe_wait_timer = sonic_demoexe_wait_timer - dt
         if sonic_demoexe_wait_timer <= 0 then
@@ -573,21 +577,27 @@ local function before_idk(dt)
         end
     end
 
-    if tails.x >= 10000 then
-        targetColor = {0.1, 0.1, 0.1}
+    local pitch, target
+    if tX >= 10000 then
+        target = {0.1, 0.1, 0.1}
+        pitch = nil
         sounds.green_hill:stop()
-    elseif tails.x >= 8260 then
-        targetColor = {0.25, 0.25, 0.25}
-        sounds.green_hill:setPitch(0.5)
-    elseif tails.x >= 4800 then
-        targetColor = {0.5, 0.5, 0.5}
-        sounds.green_hill:setPitch(0.75)
+    elseif tX >= 8260 then
+        target = {0.25, 0.25, 0.25}
+        pitch = 0.5
+    elseif tX >= 4800 then
+        target = {0.5, 0.5, 0.5}
+        pitch = 0.75
     else
-        targetColor = {1, 1, 1}
-        sounds.green_hill:setPitch(1)
+        target = {1, 1, 1}
+        pitch = 1
     end
-    for i = 1, 3 do
-        currentColor[i] = lerp(currentColor[i], targetColor[i], lerpSpeed * dt)
+    if pitch then
+        sounds.green_hill:setPitch(pitch)
+    end
+
+    for i=1,3 do
+        currentColor[i] = lerp(currentColor[i], target[i], lerpSpeed * dt)
     end
 end
 
@@ -619,12 +629,12 @@ cheating_vis = false
 cheating_vis2 = false
 cheating_alpha = 0
 cheating_alpha2 = 0.7
---lights_off
 function cheating(dt)
+    sounds.cr4sh_sound:stop()
     cheat_time = cheat_time + dt
 
     if cheat_time >= 5 and cheating_alpha < 0.36 then
-        cheating_alpha = math.min(0.36, cheating_alpha + 0.1 * dt)
+        cheating_alpha = min(0.36, cheating_alpha + 0.1 * dt)
         cheating_vis = true
         sonic_demoexe_screen.currentSprite = sonic_demoexe_screen.idle
     end
@@ -637,7 +647,7 @@ function cheating(dt)
     end
 
     if cheat_time >= 13 and cheating_alpha2 > 0 then
-        cheating_alpha2 = math.max(0, cheating_alpha2 - 0.1 * dt)
+        cheating_alpha2 = max(0, cheating_alpha2 - 0.1 * dt)
     end
 
     if cheat_time >= 20 then
@@ -671,56 +681,51 @@ function getControls()
 end
 
 local crashing = false
+local crashing2 = false
 local crashTimer = 0
-local crashDuration = 4
 local crashAlpha = 0
 local crashMaxAlpha = 0.5
 local fadeDuration = 0.25
 
-TOP_SPEED = 220
-GROUND_ACCEL= 780
-GROUND_DECEL = 1500
-GROUND_FRICTION = 1300
-AIR_ACCEL = 420
-AIR_DECEL = 360
-GRAVITY_NORMAL = 1000
-GRAVITY_JUMP_HOLD = 600
-GRAVITY_FASTFALL = 1400
-JUMP_VELOCITY = -310
-JUMP_HOLD_TIME = 0.18
-COYOTE_TIME = 0.10
-JUMP_BUFFER = 0.10
-AIR_DRAG = 0.99609375
-MAX_STEP_HEIGHT = 10
-
-function isSolidPixel(x, y, map)
-    local tx, ty = math.floor(x), math.floor(y)
-    if tx < 0 or ty < 0 or tx >= map.width or ty >= map.height then return false end
-    return map.collision[ty] and map.collision[ty][tx] or false
-end
+TOP_SPEED, GROUND_ACCEL, GROUND_DECEL = 220, 780, 1500
+GROUND_FRICTION, AIR_ACCEL, AIR_DECEL = 1300, 420, 360
+GRAVITY_NORMAL, GRAVITY_JUMP_HOLD, GRAVITY_FASTFALL = 1000, 600, 1400
+JUMP_VELOCITY, JUMP_HOLD_TIME, COYOTE_TIME, JUMP_BUFFER = -310, 0.18, 0.10, 0.10
+AIR_DRAG, MAX_STEP_HEIGHT = 0.99609375, 10
 
 function approach(v, target, amt)
-    if v < target then return math.min(v + amt, target)
-    elseif v > target then return math.max(v - amt, target)
-    end
+    if v < target then return min(v + amt, target)
+    elseif v > target then return max(v - amt, target) end
     return v
 end
 
 function checkCollision(char, map, x, y)
-    local left = math.floor(x - char.width/2)
-    local right = math.floor(x + char.width/2 - 1)
-    local top = math.floor(y - char.height/2)
-    local bottom = math.floor(y + char.height/2 - 1)
+    if type(map) == "string" then
+        map = getMap(map)
+        if not map then return false end
+    end
+
+    local halfW, halfH = char.width / 2, char.height / 2
+    local left, right = floor(x - halfW), floor(x + halfW - 1)
+    local top, bottom = floor(y - halfH), floor(y + halfH - 1)
+
     for ty = top, bottom do
-        for tx = left, right do
-            if isSolidPixel(tx, ty, map) then return true end
+        if ty >= 0 and ty < map.height then
+            for tx = left, right do
+                if tx >= 0 and tx < map.width then
+                    local idx = ty * map.width + tx + 1
+                    if map.collision[idx] then
+                        return true
+                    end
+                end
+            end
         end
     end
     return false
 end
 
 function getGroundY(char, map, baseX, baseY)
-    local startY = math.floor(baseY + char.height / 2)
+    local startY = floor(baseY + char.height / 2)
     for y = startY, startY + MAX_STEP_HEIGHT do
         if checkCollision(char, map, baseX, y - char.height / 2) then
             return y - char.height / 2
@@ -734,12 +739,10 @@ function snapToGround(char, map, dt)
         char.grounded = false
         return false
     end
-
     local groundY = getGroundY(char, map, char.x, char.y)
     if groundY then
-        local targetY = groundY
-        char.y = approach(char.y, targetY, 300 * dt)
-        char.grounded = math.abs(char.y - groundY) < 1
+        char.y = approach(char.y, groundY, 300 * dt)
+        char.grounded = abs(char.y - groundY) < 1
         if char.grounded and char.velocity.y > 0 then
             char.velocity.y = 0
         end
@@ -751,10 +754,8 @@ function snapToGround(char, map, dt)
 end
 
 function getVelocityAngle(vx, vy)
-    if vx == 0 and vy == 0 then
-        return nil
-    end
-    return math.deg(math.atan2(vy, vx)) % 360
+    if vx == 0 and vy == 0 then return nil end
+    return deg(atan2(vy, vx)) % 360
 end
 
 GROUND_FRICTION = 0.125
@@ -780,12 +781,17 @@ function updateCamera(dt, char, mapWidth, mapHeight)
     targetX = clamp(targetX, 0, mapWidth - base_width)
     targetY = clamp(targetY, 0, mapHeight - base_height)
 
-    camera.x = math.floor(targetX + 0.5)
-    camera.y = math.floor(targetY + 0.5)
+    camera.x = floor(targetX + 0.5)
+    camera.y = floor(targetY + 0.5)
 end
 
+local tails_caught = false
+local tails_caught2 = false
+
 function test_update(dt, char, map)
-    local mapWidth, mapHeight = map.width or 2000, map.height or 1080
+    local mapObj = getMap(map)
+    if not mapObj then return end
+    local mapWidth, mapHeight = mapObj.width or 2000, mapObj.height or 1080
     char.velocity = char.velocity or {x = 0, y = 0}
     char.jumping = char.jumping or false
     char.grounded = char.grounded or false
@@ -817,7 +823,7 @@ function test_update(dt, char, map)
         char._jumpBuf = math.max(0, char._jumpBuf - dt)
     end
 
-    if char == sonic_demoexe and isDemoWithPhysics and gamestate == "hs" then
+    if char == sonic_demoexe and isDemoWithPhysics then
         if char.grounded then
             vx = vx * (1 - (char.groundFriction or GROUND_FRICTION))
             if math.abs(vx) < 0.1 then vx = 0 end
@@ -827,8 +833,7 @@ function test_update(dt, char, map)
         if not char.grounded then
             vy = vy + ((char.jumping and 625) or 400) * dt
         end
-    else
-        if char ~= sonic_demoexe then
+    elseif char ~= sonic_demoexe then
             if grounded and (lookUp or lookDown) then
                 vx = 0
                 if lookUp then char.currentSprite = char.up or char.idle
@@ -889,7 +894,6 @@ function test_update(dt, char, map)
                 end
             end
         end
-    end
     if (char._jumpBuf > 0 and char._coyote > 0 and not char.jumping) then
         vy = char.jumpHeight or -300
         char.jumping = true
@@ -943,11 +947,9 @@ function test_update(dt, char, map)
     updateGamestate(dt, char)
 end
 
-local hs_timer = 7
+local hs_timer = 1
 local hs_totalTime = 0
 local tails_hiding = false
-local tails_caught = false
-local tails_caught2 = false
 local bushes_destroyed = false
 local hide_sound_played = false
 local bushes = {
@@ -977,8 +979,8 @@ blackScreen = false
 blackTimer = 0
 
 local function handleBounce(knuck, demo, dt)
-    local overlapX = math.abs(knuck.x - demo.x) < (knuck.width + demo.width) / 2
-    local overlapY = math.abs(knuck.y - demo.y) < (knuck.height + demo.height) / 2
+    local overlapX = abs(knuck.x - demo.x) < (knuck.width + demo.width) / 2
+    local overlapY = abs(knuck.y - demo.y) < (knuck.height + demo.height) / 2
 
     if overlapX and overlapY then
         if knuck.jumping or demo.jumping then
@@ -1043,13 +1045,15 @@ function knuck_up(dt)
     end
     if knuckles.x > 5990 then
         waiting_knuck = waiting_knuck + dt
-
+        test_update(dt, sonic_demoexe, "map2")
+        local map2 = getMap("map2")
+        if not map2 then return end
         local targetCamX = map2.width - base_width
         local camSpeed = 950
         if camera.x < targetCamX then
-            camera.x = math.min(camera.x + camSpeed * dt, targetCamX)
+            camera.x = min(camera.x + camSpeed * dt, targetCamX)
         else
-            camera.x = math.max(camera.x - camSpeed * dt, targetCamX)
+            camera.x = max(camera.x - camSpeed * dt, targetCamX)
         end
 
         idk_fix = true
@@ -1074,16 +1078,17 @@ function knuck_up(dt)
             blackTimer = blackTimer - dt
             if blackTimer <= 0 then
                 blackScreen = false
-                knuckles_alive = false
-                knuckles_lock = false
-                eggman_lock = true
+                charStatus.knuckles_alive = false
+                charStatus.knuckles_lock = false
+                charStatus.eggman_lock = true
                 gamestate = "selection"
             end
             return
         end
 
-        if bossfightActive then
-            sonic_demoexe.physics_enabled = true
+        if bossfightActive and sonic_demoexe then
+            test_update(dt, sonic_demoexe, "map2")
+            sonic_demoexe.physics_enabled = false
             if sonic_demoexe.x > 6484 then
                 sonic_demoexe.direction = -1
             elseif sonic_demoexe.x < 5993 then
@@ -1112,15 +1117,15 @@ function knuck_up(dt)
 
             handleBounce(knuckles, sonic_demoexe, dt)
             if sonic_demoexe.velocity.x < targetSpeed then
-                sonic_demoexe.velocity.x = math.min(sonic_demoexe.velocity.x + accel * dt, targetSpeed)
+                sonic_demoexe.velocity.x = min(sonic_demoexe.velocity.x + accel * dt, targetSpeed)
             elseif sonic_demoexe.velocity.x > targetSpeed then
-                sonic_demoexe.velocity.x = math.max(sonic_demoexe.velocity.x - accel * dt, targetSpeed)
+                sonic_demoexe.velocity.x = max(sonic_demoexe.velocity.x - accel * dt, targetSpeed)
             end
-            if sonic_demoexe.currentSprite == sonic_demoexe.fall[1] then
+            if sonic_demoexe.currentSprite == sonic_demoexe.fall then
                 updateSprite(dt, sonic_demoexe.fall, sonic_demoexe)
             elseif sonic_demoexe.jumping then
                 updateSprite(dt, sonic_demoexe.jump, sonic_demoexe)
-            elseif math.abs(sonic_demoexe.velocity.x) < math.abs(targetSpeed) * 0.9 then
+            elseif abs(sonic_demoexe.velocity.x) < abs(targetSpeed) * 0.9 then
                 updateSprite(dt, sonic_demoexe.walk, sonic_demoexe)
             else
                 updateSprite(dt, sonic_demoexe.run, sonic_demoexe)
@@ -1131,11 +1136,9 @@ function knuck_up(dt)
             end
             if sonic_demoexe.x < 5991 then
                 sonic_demoexe.x = 5991
-                sonic_demoexe.velocity.x = math.max(0, sonic_demoexe.velocity.x)
+                sonic_demoexe.velocity.x = max(0, sonic_demoexe.velocity.x)
             end
         end
-
-        test_update(dt, sonic_demoexe, map2)
     end
 end
 
@@ -1146,7 +1149,7 @@ function eggman_up(dt)
             updateSprite(dt, sonic_demoexe.float, sonic_demoexe)
         end
 
-        if math.abs(eggman.y - sonic_demoexe.y) > 50 then
+        if abs(eggman.y - sonic_demoexe.y) > 50 then
             sonic_demoexe.velocity.y = sonic_demoexe.jumpHeight
             updateSprite(dt, sonic_demoexe.fly, sonic_demoexe)
         end
@@ -1155,14 +1158,14 @@ function eggman_up(dt)
         local dy = eggman.y - sonic_demoexe.y
 
         if dx ~= 0 then
-            sonic_demoexe.x = sonic_demoexe.x + (dx / math.abs(dx)) * 682 * dt
+            sonic_demoexe.x = sonic_demoexe.x + (dx / abs(dx)) * 682 * dt
         end
 
         local verticalSpeed = 305
         local deadzone = 10
 
-        if math.abs(dy) > deadzone then
-            sonic_demoexe.y = sonic_demoexe.y + (dy / math.abs(dy)) * verticalSpeed * dt
+        if abs(dy) > deadzone then
+            sonic_demoexe.y = sonic_demoexe.y + (dy / abs(dy)) * verticalSpeed * dt
         end
 
         if eggman.x > sonic_demoexe.x then
@@ -1173,15 +1176,14 @@ function eggman_up(dt)
 
         local triggerDistance = 125
 
-        local dx = math.abs(eggman.x - sonic_demoexe.x)
-        local dy = math.abs(eggman.y - sonic_demoexe.y)
+        local dx = abs(eggman.x - sonic_demoexe.x)
+        local dy = abs(eggman.y - sonic_demoexe.y)
 
         if not crashing and dx < triggerDistance and dy < triggerDistance then
             crashing = true
             crashTimer = 0
-            love.window.setTitle("SONIC 2 3 1 (Not responding)")
-            eggman_alive = false
-            eggman_lock = false
+            charStatus.eggman_alive = false
+            charStatus.eggman_lock = false
             if not error_sound_played then
                 sounds.error_sound:play()
                 error_sound_played = true
@@ -1196,7 +1198,6 @@ end
 local lights_off_played = false
 function hide_and_seek(dt)
     hs_totalTime = hs_totalTime + dt
-
     if (hs_totalTime >= 45 or hs_timer <= 0) and not bushes_destroyed then
         bushes = {}
         bushes_destroyed = true
@@ -1209,6 +1210,7 @@ function hide_and_seek(dt)
             flashScreen(0.54)
         end
     end
+
     local moveRight, moveLeft, jump, lookUp, lookDown = getControls()
     tails_hiding = false
     for _, bush in ipairs(bushes) do
@@ -1218,20 +1220,17 @@ function hide_and_seek(dt)
             break
         end
     end
+
     if tails_caught then
-        test_update(dt, sonic_demoexe, map1)
         tails.velocity.x = 0
         tails.velocity.y = tails.velocity.y + gravity * dt
-        local nextTailY = tails.y + tails.velocity.y * dt
-        if not checkCollision(tails, map1, tails.x, nextTailY) then
-            tails.y = nextTailY
-            tails.grounded = false
-            updateSprite(dt, tails.damage, tails)
-        else
-            tails.y = nextTailY
-            tails.velocity.y = 0
-            tails.grounded = true
+        test_update(dt, sonic_demoexe, "map1")
+
+        if tails.grounded then
             tails.currentSprite = tails.fall
+            tails.velocity.y = 0
+        else
+            updateSprite(dt, tails.damage, tails)
         end
         if sonic_demoexe.grounded then
             if sonic_demoexe.kill_tails then
@@ -1240,17 +1239,16 @@ function hide_and_seek(dt)
                 if sonic_demoexe.spriteIndex >= #sonic_demoexe.kill_tails then
                     sonic_demoexe.spriteIndex = #sonic_demoexe.kill_tails
                     show_black_screen = true
-                    gravity = 625
                 end
             end
-        else
-            if sonic_demoexe.fall then
-                updateSprite(dt, sonic_demoexe.fall, sonic_demoexe)
-            end
+        elseif sonic_demoexe.fall then
+            updateSprite(dt, sonic_demoexe.fall, sonic_demoexe)
         end
+
         return
     end
-    updateSprite(dt * 0.6, fire_bg.idle, fire_bg)
+
+    updateSprite(dt * 0.7, fire_bg.idle, fire_bg)
     if tails_hiding then
         hs_timer = 12
         if not hide_sound_played then
@@ -1264,31 +1262,34 @@ function hide_and_seek(dt)
         hide_sound_played = false
     end
     if hs_timer <= 0 and not tails_caught then
-        gravity = 1250
         local dx = tails.x - sonic_demoexe.x
         local dy = tails.y - sonic_demoexe.y
         if dx ~= 0 then
-            sonic_demoexe.x = sonic_demoexe.x + (dx / math.abs(dx)) * 542 * dt
+            sonic_demoexe.x = sonic_demoexe.x + (dx / abs(dx)) * 542 * dt
         end
+
         local verticalSpeed = 305
         local deadzone = 10
-        if math.abs(dy) > deadzone then
-            sonic_demoexe.y = sonic_demoexe.y + (dy / math.abs(dy)) * verticalSpeed * dt
+        if abs(dy) > deadzone then
+            sonic_demoexe.y = sonic_demoexe.y + (dy / abs(dy)) * verticalSpeed * dt
         end
-        sonic_demoexe.direction = (dx > 0) and 1 or -1
+
         if not sonic_demoexe.grounded and sonic_demoexe.fly then
             updateSprite(dt, sonic_demoexe.fly, sonic_demoexe)
         elseif sonic_demoexe.grounded and sonic_demoexe.float then
             updateSprite(dt, sonic_demoexe.float, sonic_demoexe)
         end
-        if math.abs(tails.x - sonic_demoexe.x) < 32 and math.abs(tails.y - sonic_demoexe.y) < 32 then
+        if math.abs(dx) < 32 and math.abs(dy) < 32 then
             tails_caught = true
             sonic_demoexe.physics_enabled = true
-            sonic_demoexe.catching_tails = true
-            sonic_demoexe.velocity.x, sonic_demoexe.velocity.y = 0, -245
-            tails.caught_by_demo = true
-            tails.velocity.x, tails.velocity.y = 0, 0
+            tails.velocity.x = 0
             tails.currentSprite = tails.fall
+
+            if not sonic_demoexe.hasJumpedOnCatch then
+                sonic_demoexe.velocity.x = 0
+                sonic_demoexe.velocity.y = -300
+                sonic_demoexe.hasJumpedOnCatch = true
+            end
         end
     end
 end
@@ -1373,13 +1374,13 @@ local frameDelay = 25
 local frameCounter = 0
 
 local flickerTimer = 0
-local flickerInterval = 0.5
+local flickerInterval = 0.1
 local showPressText = true
 local flickerActive = false
+flickerMaxRepeats = 15
 link = "https://docs.google.com/document/d/1J0nOXnQMULgsqhbdnPfF3uHCHJ0wMvX1BC4TgXKVpX8"
 function menuscreen_update(dt)
     if gamestate ~= "menuscreen" then return end
-
     animation_timer = animation_timer + dt
     if animation_timer >= ANIM_SPEED and animHandlers[animation_phase] then
         animation_timer = 0
@@ -1408,23 +1409,35 @@ function menuscreen_update(dt)
             end
         end
         sounds.buildUPSound:play()
-
         if finished_transformation then
             pressTextTimer = math.min(pressTextTimer + dt, pressTextAnimTime)
         end
 
         if (love.keyboard.isDown("return") or jumpButton.active) and finished_transformation then
-            shrinkingMenu = true
             if sounds.laugh_sound then
                 sounds.laugh_sound:play()
             end
+
+            if not flickerActive then
+                flickerActive = true
+                flickerRepeat = 0
+                flickerTimer = 0
+                flickerSpeed = flickerInterval
+                flickerMaxRepeats = 15
+            end
         end
-        flickerActive = true
+
         if flickerActive then
             flickerTimer = flickerTimer + dt
-            if flickerTimer >= flickerInterval then
+            if flickerTimer >= flickerSpeed then
                 flickerTimer = 0
                 showPressText = not showPressText
+                flickerRepeat = flickerRepeat + 1
+                if flickerRepeat >= flickerMaxRepeats then
+                    flickerActive = false
+                    showPressText = false
+                    shrinkingMenu = true
+                end
             end
         end
     end
@@ -1540,7 +1553,6 @@ function ring_anim(dt)
 end
 
 local joystickCooldown = 0
-local selectionLocked = false
 local returnPressed = false
 errorSoundPlayed = false
 
@@ -1548,160 +1560,170 @@ local function updateScrollingBG(dt)
     if animation_phase == "initial" then return end
 
     local width = menu:getWidth()
-    bgX1 = bgX1 + scroll_speed * dt
-    bgX2 = bgX2 + scroll_speed * dt
-    if bgX1 >= width then bgX1 = bgX2 - width
-    elseif bgX1 <= -width then bgX1 = bgX2 + width end
-
-    if bgX2 >= width then bgX2 = bgX1 - width
-    elseif bgX2 <= -width then bgX2 = bgX1 + width end
+    bgX1, bgX2 = bgX1 + scroll_speed * dt, bgX2 + scroll_speed * dt
+    if bgX1 >= width then bgX1 = bgX2 - width elseif bgX1 <= -width then bgX1 = bgX2 + width end
+    if bgX2 >= width then bgX2 = bgX1 - width elseif bgX2 <= -width then bgX2 = bgX1 + width end
 end
+
+local function eggmanCrashThing(dt)
+    if not crashing then
+        love.window.setTitle("SONIC 2 3 1")
+        test_update(dt, eggman, "map3")
+        eggman_up(dt)
+        return
+    end
+
+    if not crashing2 then
+        sonic_demoexe.currentSprite = sonic_demoexe.fly[1]
+        eggman.currentSprite = eggman.idle
+        ringAnimState = false
+    end
+
+    crashTimer = crashTimer + dt
+    love.window.setTitle("SONIC 2 3 1 (Not responding)")
+
+    crashAlpha = (crashTimer <= fadeDuration)
+        and (crashTimer / fadeDuration) * crashMaxAlpha
+        or crashMaxAlpha
+
+    if crashTimer >= 7 then
+        updateSprite(dt * 0.5, sonic_demoexe.fly_anim, sonic_demoexe)
+        sonic_demoexe.spriteIndex = min(sonic_demoexe.spriteIndex, #sonic_demoexe.fly_anim)
+    end
+
+    if not crashing2 and crashTimer >= 10 then
+        crashing, crashing2 = false, true
+        love.window.setTitle("")
+    end
+
+    if crashing2 and crashTimer < 12 then
+        sounds.cr4sh_sound:play()
+        gh1 = fast.getImage("images/maps/gh1_crashed.png")
+        eggman.currentSprite = eggman.crashed
+        sonic_demoexe.currentSprite = sonic_demoexe.cr4sh
+    elseif crashTimer >= 12 then
+        gamestate, crashing2, crashAlpha = "cheating", false, 0
+    end
+end
+local gamestateHandlers = {
+    test = function(dt)
+        test_update(dt, tails, "map")
+        before_idk(dt)
+        love.window.setTitle("SONIC 2 3 1")
+    end,
+    hs = function(dt)
+        --if not tails_caught then
+        test_update(dt, tails, "map1")
+        --end
+        hide_and_seek(dt)
+        if show_black_screen then
+            sounds.flames:stop()
+            tails_caught_timer = tails_caught_timer + dt
+            if tails_caught_timer >= 4 then
+                show_black_screen, charStatus.tails_alive = false, false
+                charStatus.knuckles_lock, charStatus.tails_lock = true, false
+                gamestate = "selection"
+            end
+        end
+    end,
+    knuck = function(dt)
+        test_update(dt, knuckles, "map2")
+        knuck_up(dt)
+        love.window.setTitle("SONIC 2 3 1")
+    end,
+    testmap = function(dt)
+        test_update(dt, test_character, "testmap2")
+    end,
+    eggman = eggmanCrashThing,
+    torture = torture,
+    william = function(dt)
+        william_update(dt)
+        love.mouse.setRelativeMode(true)
+    end,
+    cheating = function(dt)
+        love.window.setTitle("")
+        cheating(dt)
+    end,
+    warning = function()
+        if love.keyboard.isDown("return") or jumpButton.active then
+            startTransition("error")
+        end
+    end,
+    doc = function()
+        if love.keyboard.isDown("return") or jumpButton.active then
+            openURL(link)
+            love.event.quit()
+        end
+    end
+}
 
 function love.update(dt)
     gameTime = gameTime + dt
     if ok and discord then
         discord.runCallbacks()
     end
+    fast.reduceMemory(dt)
     update_flash(dt)
     ring_anim(dt)
 
-    if gamestate == "test" then
-        test_update(dt, tails, map)
-        before_idk(dt)
-    elseif gamestate == "hs" then
-        test_update(dt, tails, map1)
-        hide_and_seek(dt)
-        if show_black_screen then
-            sounds.flames:stop()
-            tails_caught_timer = tails_caught_timer + dt
-            if tails_caught_timer >= 4 then
-                show_black_screen = false
-                tails_alive = false
-                knuckles_lock = true
-                tails_lock = false
-                gamestate = "selection"
-            end
-        end
-    elseif gamestate == "knuck" then
-        test_update(dt, knuckles, map2)
-        knuck_up(dt)
-    elseif gamestate == "testmap" then
-        test_update(dt, test_character, testmap2)
-    elseif gamestate == "eggman" then
-        if not crashing then
-            test_update(dt, eggman, map3)
-            eggman_up(dt)
-        else
-            sonic_demoexe.currentSprite = sonic_demoexe.fly[1]
-            eggman.currentSprite = eggman.idle
-            ringAnimState = false
-        end
-
-        if crashing then
-            crashTimer = crashTimer + dt
-
-            if crashTimer <= fadeDuration then
-                crashAlpha = (crashTimer / fadeDuration) * crashMaxAlpha
-            else
-                crashAlpha = crashMaxAlpha
-            end
-
-            if crashTimer >= crashDuration then
-                gamestate = "cheating"
-                love.window.setTitle("")
-                crashing = false
-                crashTimer = 0
-                crashAlpha = 0
-            end
-        end
-    elseif gamestate == "torture" then
-        torture(dt)
-    elseif gamestate == "william" then
-        william_update(dt)
-        love.mouse.setRelativeMode(true)
-    elseif gamestate == "cheating" then
-        cheating(dt)
-    elseif gamestate == "warning" and (love.keyboard.isDown("return") or jumpButton.active) then
-        startTransition("error")
-    elseif gamestate == "doc" and (love.keyboard.isDown("return") or jumpButton.active) then
-        openURL(link)
-        love.event.quit()
+    local handler = gamestateHandlers[gamestate]
+    if handler then
+        handler(dt)
     else
         love.mouse.setRelativeMode(false)
     end
 
     if gamestate == "selection" then
-        --if not selectionLocked then
-            if love.keyboard.isDown("return") or jumpButton.active then
-                if not returnPressed then
-                    returnPressed = true
-                    if selectionIndex == 1 and tails_lock then
-                        startTransition("test")
-                        selectionLocked = true
-                    elseif selectionIndex == 2 and knuckles_lock then
-                        startTransition("knuck")
-                        selectionLocked = true
-                    elseif selectionIndex == 3 and eggman_lock then
-                        startTransition("eggman")
-                        selectionLocked = true
-                    end
-                end
-            else
-                returnPressed = false
-            end
-
-            if joystickCooldown > 0 then
-                joystickCooldown = joystickCooldown - dt
-            end
-
-            if joystickCooldown <= 0 then
-                if joystick.dx > 0.5 then
-                    selectionIndex = math.min(#selectionOptions, selectionIndex + 1)
-                    sounds.reboot_old:play()
-                    joystickCooldown = 0.25
-                elseif joystick.dx < -0.5 then
-                    selectionIndex = math.max(1, selectionIndex - 1)
-                    sounds.reboot_old:play()
-                    joystickCooldown = 0.25
+        tails_caught = false
+        tails_caught2 = false
+        sonic_demoexe.physics_enabled = false
+        if (love.keyboard.isDown("return") or jumpButton.active) then
+            if not returnPressed then
+                returnPressed = true
+                local choice = ({
+                    [1] = {lock = charStatus.tails_lock, state = "test"},
+                    [2] = {lock = charStatus.knuckles_lock, state = "knuck"},
+                    [3] = {lock = charStatus.eggman_lock, state = "eggman"}
+                })[selectionIndex]
+                if choice and choice.lock then
+                    startTransition(choice.state)
                 end
             end
-        --end
-        zoomTimer = math.min(zoomTimer + dt, zoomDuration)
+        else
+            returnPressed = false
+        end
+
+        if joystickCooldown > 0 then
+            joystickCooldown = joystickCooldown - dt
+        elseif abs(joystick.dx) > 0.5 then
+            selectionIndex = max(1, min(#selectionOptions, selectionIndex + (joystick.dx > 0 and 1 or -1)))
+            sounds.reboot_old:play()
+            joystickCooldown = 0.25
+        end
+
+        zoomTimer = min(zoomTimer + dt, zoomDuration)
         local t = easeInOutCubic(zoomTimer / zoomDuration)
         selectionScale = 3 + (1 - 3) * t
-        selectionAlpha = 0 + (1 - 0) * t
-
+        selectionAlpha = t
         if zoomTimer >= zoomDuration then
-            selectionScale = 1
-            selectionAlpha = 1
+            selectionScale, selectionAlpha = 1, 1
         end
+
+        local titles = {"2", "3", "1"}
+        love.window.setTitle(titles[selectionIndex] or "")
     else
         joystickCooldown = 0
-        selectionLocked = false
         returnPressed = false
-        --jumpButton.active = false
-        --joystick.active = false
-        --joystick.dx, joystick.dy = 0, 0
     end
 
     if gamestate == "credits" then
-        local total_text_height = #credits_text * line_height
-        credits_y = credits_y - (scroll_speed * dt)
-
-        if credits_y < -total_text_height then
+        credits_y = credits_y - scroll_speed * dt
+        if credits_y < -#credits_text * line_height then
             gamestate = "doc"
         end
     elseif gamestate == "doc" then
-        if message_alpha < 1 then
-            message_alpha = message_alpha + dt * 0.5
-        end
-    end
-
-    menuscreen_update(dt)
-    updateStageTitle(dt)
-    updateScrollingBG(dt)
-
-    if gamestate == "error" then
+        message_alpha = min(1, message_alpha + dt * 0.5)
+    elseif gamestate == "error" then
         elapsedTime4 = (elapsedTime4 or 0) + dt
         reboot_vis2 = elapsedTime4 >= 2 and elapsedTime4 < 6
         reboot_vis = elapsedTime4 >= 7
@@ -1713,36 +1735,30 @@ function love.update(dt)
 
         if reboot_vis and not rebootDone then
             stageIncrementTimer = stageIncrementTimer or 0
-
             if not stageComplete then
                 stageIncrementTimer = stageIncrementTimer + dt
                 if stageIncrementTimer >= 0.5 then
                     stageIncrementTimer = stageIncrementTimer - 0.5
-                    stageProgress = math.min(100, stageProgress + 10)
+                    stageProgress = min(100, stageProgress + 10)
                     sounds.reboot_old:play()
-
-                    if stageProgress >= 100 then
-                        stageComplete = true
-                        stageDelay = 0
-                    end
+                    stageComplete = stageProgress >= 100
+                    if stageComplete then stageDelay = 0 end
                 end
             else
                 stageDelay = stageDelay + dt
                 if stageDelay >= 1 then
                     currentStage = currentStage + 1
                     if currentStage > #loadingStages then
-                        rebootDone = true
-                        stageDelay = 0
+                        rebootDone, stageDelay = true, 0
                     else
-                        stageProgress = 0
-                        stageComplete = false
+                        stageProgress, stageComplete = 0, false
                     end
                 end
             end
         elseif rebootDone then
-            fadeBlack = math.min(1, fadeBlack + dt * 0.5)
+            fadeBlack = min(1, fadeBlack + dt * 0.5)
             if fadeBlack >= 1 then
-                helloFade = math.min(1, helloFade + dt * 0.5)
+                helloFade = min(1, helloFade + dt * 0.5)
                 if helloFade >= 1 then
                     helloWilliamTimer = (helloWilliamTimer or 0) + dt
                     if helloWilliamTimer >= 2 then
@@ -1751,37 +1767,30 @@ function love.update(dt)
                 end
             end
         end
-    end
-
-    if gamestate == "game_over" then
+    elseif gamestate == "game_over" then
         waiting = waiting + dt
-        if waiting >= 3 then
-            startTransition("credits")
-        end
+        if waiting >= 3 then startTransition("credits") end
     end
 
     if transitioning then
-        transitionAlpha = math.min(transitionAlpha + transitionSpeed * dt, 1)
+        transitionAlpha = min(transitionAlpha + transitionSpeed * dt, 1)
         if transitionAlpha >= 1 then
             gamestate = transitionTarget
             transitioning = false
         end
     else
-        transitionAlpha = math.max(transitionAlpha - transitionSpeed * dt, 0)
+        transitionAlpha = max(transitionAlpha - transitionSpeed * dt, 0)
     end
 
     colorTimer = colorTimer + dt
-    colorLerp = (colorTimer % colorPhaseTime) / colorPhaseTime
-    if math.floor(colorTimer / colorPhaseTime) % 2 == 1 then
-        colorLerp = 1 - colorLerp
-    end
-    if shrinkingMenu then
-        shrinkTimer = math.min(shrinkTimer + dt, shrinkDuration)
-        local t = shrinkTimer / shrinkDuration
-        local eased = easeOutCubic(t)
-        menuShrink = 1 - (1 - 0.5) * eased
-        menuAlpha  = 1 - eased
+    local phase = floor(colorTimer / colorPhaseTime) % 2
+    colorLerp = ((colorTimer % colorPhaseTime) / colorPhaseTime) * (phase == 0 and 1 or -1) + (phase == 1 and 1 or 0)
 
+    if shrinkingMenu then
+        shrinkTimer = min(shrinkTimer + dt, shrinkDuration)
+        local eased = easeOutCubic(shrinkTimer / shrinkDuration)
+        menuShrink = 1 - (1 - 0.5) * eased
+        menuAlpha = 1 - eased
         if shrinkTimer >= shrinkDuration then
             shrinkingMenu = false
             gamestate = "selection"
@@ -1796,6 +1805,10 @@ function love.update(dt)
         triggerStageTitle()
         titleCardPlayed = true
     end
+
+    menuscreen_update(dt)
+    updateStageTitle(dt)
+    updateScrollingBG(dt)
 end
 
 local function drawNumberString(x, y, str)
@@ -1833,12 +1846,12 @@ function selection()
     local baseX = halfW + offsetX2 + characterOffsetX
     local centerY = halfH + offsetY2
 
-    love.graphics.draw(selection_box, halfW + offsetX2, centerY, 0, 1, 1,
-    selection_box:getWidth() * 0.5, selection_box:getHeight() * 0.5)
+    love.graphics.draw(selectionImages.selection_box, halfW + offsetX2, centerY, 0, 1, 1,
+    selectionImages.selection_box:getWidth() * 0.5, selectionImages.selection_box:getHeight() * 0.5)
     local characters = {
-        { alive = tails_alive, lock = tails_lock, img = tails_selection, dead = dead_tails },
-        { alive = knuckles_alive, lock = knuckles_lock, img = knuck_selection, dead = dead_knuckles },
-        { alive = eggman_alive, lock = eggman_lock, img = eggman_selection, dead = dead_eggman }
+        { alive = charStatus.tails_alive, lock = charStatus.tails_lock, img = selectionImages.tails_selection, dead = selectionImages.dead_tails },
+        { alive = charStatus.knuckles_alive, lock = charStatus.knuckles_lock, img = selectionImages.knuck_selection, dead = selectionImages.dead_knuckles },
+        { alive = charStatus.eggman_alive, lock = charStatus.eggman_lock, img = selectionImages.eggman_selection, dead = selectionImages.dead_eggman }
     }
 
     for i, char in ipairs(characters) do
@@ -1899,12 +1912,12 @@ local function char_draw(char, offsetX, offsetY)
 
     local sprite = char.currentSprite
     if type(sprite) == "table" then
-        sprite = sprite[math.floor(char.spriteIndex + 0.5)] or sprite[1]
+        sprite = sprite[floor(char.spriteIndex + 0.5)] or sprite[1]
     end
     if sprite then
         local flipX = char.direction == -1 and -1 or 1
-        local drawX = math.floor(char.x + offsetX + 0.5)
-        local drawY = math.floor(char.y + offsetY + 0.5)
+        local drawX = floor(char.x + offsetX + 0.5)
+        local drawY = floor(char.y + offsetY + 0.5)
 
         love.graphics.draw(
             sprite,
@@ -1913,8 +1926,8 @@ local function char_draw(char, offsetX, offsetY)
             char.fakeAngle,
             flipX,
             1,
-            math.floor(sprite:getWidth() / 2 + 0.5),
-            math.floor(sprite:getHeight() / 2 + 0.5)
+            floor(sprite:getWidth() / 2 + 0.5),
+            floor(sprite:getHeight() / 2 + 0.5)
         )
     end
 end
@@ -1962,21 +1975,27 @@ function openURL(url)
     end
 end
 
-local preloadedTiles = {}
+preloadedTiles = {}
+local hw, hh, aspect, fovRad, fovHalfTan
+
+function updateProjectionConstants()
+    local w, h = base_width, base_height
+    hw, hh = w * 0.5, h * 0.5
+    aspect = w / h
+    fovRad = math.rad(70)
+    fovHalfTan = math.tan(fovRad / 2)
+end
 
 function preloadTiles()
-    preloadedTiles = {}
+    updateProjectionConstants()
     local cy, sy = math.cos(-camera_3d.yaw), math.sin(-camera_3d.yaw)
     local cp, sp = math.cos(-camera_3d.pitch), math.sin(-camera_3d.pitch)
-    local fovRad = math.rad(70)
-    local fovHalfTan = math.tan(fovRad / 2)
-    local hw, hh = base_width * 0.5, base_height * 0.5
-    local aspect = base_width / base_height
 
+    local n = 0
     for t = 1, #baseplateTiles do
         local tile = baseplateTiles[t]
         if inRenderDistance(tile) then
-            local screenVerts = {}
+            local verts = {}
             local visible = true
 
             for i = 1, 4 do
@@ -1991,57 +2010,51 @@ function preloadTiles()
                     break
                 end
 
-                local sx = x1 / (z2 * fovHalfTan * aspect)
-                local sy = y1 / (z2 * fovHalfTan)
-                screenVerts[i] = {sx * hw + hw, -sy * hh + hh}
+                local invZ = 1 / (z2 * fovHalfTan)
+                verts[i * 2 - 1] = x1 * invZ / aspect * hw + hw
+                verts[i * 2]     = -y1 * invZ * hh + hh
             end
 
             if visible then
-                local centerX = (tile[1][1] + tile[3][1]) * 0.5
-                local centerY = (tile[1][2] + tile[3][2]) * 0.5
-                local centerZ = (tile[1][3] + tile[3][3]) * 0.5
-                local dx = centerX - camera_3d.x
-                local dy = centerY - camera_3d.y
-                local dz = centerZ - camera_3d.z
-                local dist = math.sqrt(dx*dx + dy*dy + dz*dz)
+                local cx = (tile[1][1] + tile[3][1]) * 0.5 - camera_3d.x
+                local cyPos = (tile[1][2] + tile[3][2]) * 0.5 - camera_3d.y
+                local cz = (tile[1][3] + tile[3][3]) * 0.5 - camera_3d.z
+                local distSq = cx*cx + cyPos*cyPos + cz*cz
 
-                table.insert(preloadedTiles, {
-                    verts = screenVerts,
-                    col = tile[1][4],
-                    dist = dist
-                })
+                n = n + 1
+                preloadedTiles[n] = preloadedTiles[n] or {}
+                preloadedTiles[n].verts = verts
+                preloadedTiles[n].col = tile[1][4]
+                preloadedTiles[n].dist = distSq
             end
         end
     end
+    for i = n + 1, #preloadedTiles do preloadedTiles[i] = nil end
 end
 
-function draw_william()
-    love.graphics.push()
-
-    local w, h = base_width, base_height
-    local hw, hh = w * 0.5, h * 0.5
-    local aspect = w / h
-    local fovRad = math.rad(70)
+local function draw_william()
+    updateProjectionConstants()
+    local cy, sy = math.cos(-camera_3d.yaw), math.sin(-camera_3d.yaw)
+    local cp, sp = math.cos(-camera_3d.pitch), math.sin(-camera_3d.pitch)
 
     if not sounds.buildUPSound:isPlaying() then
         sounds.buildUPSound:play()
     end
 
-    local coastFadeStart, coastFadeEnd = 50, 80
+    local coastFadeStart, coastFadeEnd = 45, 45
+    local coastFadeStart2 = coastFadeStart * coastFadeStart
+    local coastFadeEnd2   = coastFadeEnd * coastFadeEnd
 
-    local w, h = base_width, base_height
-    local hw, hh = w * 0.5, h * 0.5
-    local aspect = w / h
-    local fovRad = math.rad(70)
-
-    local cy, sy = math.cos(-camera_3d.yaw), math.sin(-camera_3d.yaw)
-    local cp, sp = math.cos(-camera_3d.pitch), math.sin(-camera_3d.pitch)
-    local fovHalfTan = math.tan(fovRad / 2)
-
-    for _, t in ipairs(preloadedTiles) do
-        local fade = clamp((coastFadeEnd - t.dist) / (coastFadeEnd - coastFadeStart), 0, 1)
-        fast.drawPolygon(t.verts, t.col, fade)
+    for i = 1, #preloadedTiles do
+        local t = preloadedTiles[i]
+        if t.verts and #t.verts >= 6 then
+            local fade = clamp((coastFadeEnd2 - t.dist) / (coastFadeEnd2 - coastFadeStart2), 0, 1)
+            local r, g, b = t.col[1] or 1, t.col[2] or 1, t.col[3] or 1
+            love.graphics.setColor(r, g, b, fade)
+            love.graphics.polygon("fill", t.verts)
+        end
     end
+
     do
         local x, y, z = chaser.x - camera_3d.x, chaser.y - camera_3d.y, chaser.z - camera_3d.z
         local x1, z1 = x * cy - z * sy, x * sy + z * cy
@@ -2049,16 +2062,17 @@ function draw_william()
         local z2 = y * sp + z1 * cp
 
         if z2 > 0.1 then
-            local scale = 25 / z2
+            local invZ = 1 / z2
+            local scale = 25 * invZ
             local sx = x1 / (z2 * fovHalfTan * aspect)
             local sy = y1 / (z2 * fovHalfTan)
 
-            local fadeStart, fadeEnd = 100, 15
-            local dist = math.sqrt(dist2(camera_3d, chaser))
-            local alpha = clamp((fadeStart - dist) / (fadeStart - fadeEnd), 0, 1)
+            local distSq = dist2(camera_3d, chaser)
+            local fadeStart2, fadeEnd2 = 100*100, 15*15
+            local alpha = clamp((fadeStart2 - distSq) / (fadeStart2 - fadeEnd2), 0, 1)
 
             love.graphics.setColor(1, 1, 1, alpha)
-            fast.draw(
+            love.graphics.draw(
                 chase_img,
                 sx * hw + hw - chase_img:getWidth() * scale / 2,
                 -sy * hh + hh - chase_img:getHeight() * scale / 2,
@@ -2066,10 +2080,9 @@ function draw_william()
             )
         end
     end
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(idk_img, 0, 0, 0, base_width / idk_img:getWidth(), base_height / idk_img:getHeight())
 
-    love.graphics.pop()
-    love.graphics.setColor(1,1,1,1)
-    love.graphics.draw(idk_img, 0, 0, 0, w/idk_img:getWidth(), h/idk_img:getHeight())
     drawStats()
 end
 
@@ -2096,7 +2109,7 @@ function draw_menuscreen()
             love.graphics.draw(splash_frames.idle[frames_idk_d], demoX, demoY- 10)
         end
 
-        local t = math.min(pressTextTimer / pressTextAnimTime, 1)
+        local t = min(pressTextTimer / pressTextAnimTime, 1)
         local easedT = easeInOutCubic(t)
         local currentY = pressTextStartY + (pressTextTargetY - pressTextStartY) * easedT
         local text = "Press start to play."
@@ -2119,7 +2132,7 @@ function draw_menuscreen()
     local demoX = (base_width - DEMO_MenuScreen:getWidth()) / 2
     local demoY = (base_height - DEMO_MenuScreen:getHeight()) / 2
 
-    local t = math.min(timer / animTime, 1)
+    local t = min(timer / animTime, 1)
     local currentY = linear(demoY + 10, demoY - 10, t)
 
     local circleX = (base_width - circle:getWidth()) / 2
@@ -2153,7 +2166,7 @@ function draw_menuscreen()
 end
 
 function linearTime(t)
-    return math.max(0, math.min(1, t))
+    return max(0, min(1, t))
 end
 
 function tails_tail_thing()
@@ -2219,10 +2232,10 @@ function love.draw()
     love.graphics.setCanvas(canvas)
     love.graphics.clear(0,0,0,1)
     love.graphics.setColor(0, 0, 0)
-    love.graphics.rectangle("fill", 0, 0, base_width * 2, base_height * 2)
+    love.graphics.rectangle("fill", 0, 0, base_width, base_height)
     love.graphics.setColor(1, 1, 1)
-    --love.graphics.translate(offset_x, offset_y)
-    --love.graphics.scale(scale_factor, scale_factor)
+
+    local camX, camY = floor(camera.x + 0.5), floor(camera.y + 0.5)
 
     local function drawStageTitle(titleImg, circlesImg, actImg)
         if not showStageTitle then return end
@@ -2240,7 +2253,7 @@ function love.draw()
         love.graphics.rectangle("fill", 0, 0, base_width, base_height)
         love.graphics.setColor(1, 1, 1, 1)
 
-        local enterProgress = math.min(stageTitleTimer / stageTitleFadeTime, 1)
+        local enterProgress = min(stageTitleTimer / stageTitleFadeTime, 1)
         local startX = -100
         local endX = (base_width - titleImg:getWidth()) / 2 - 60
         local slideX = lerp(startX, endX, linearTime(enterProgress))
@@ -2254,94 +2267,78 @@ function love.draw()
     end
 
     if gamestate == "menuscreen" or gamestate == "selection" then
-        local mouseX, mouseY = love.mouse.getPosition()
-        local canvasMouseX = (mouseX - offset_x) / scale_factor
-        local canvasMouseY = (mouseY - offset_y) / scale_factor
-        canvasMouseX = math.max(0, math.min(base_width, canvasMouseX))
-        canvasMouseY = math.max(0, math.min(base_height, canvasMouseY))
-        local parallaxX = (canvasMouseX - base_width / 2) * 0.05
-        local parallaxY = (canvasMouseY - base_height / 2) * 0.05
-        drawScrollingBG(menu_finished, bgX1, bgX2, parallaxX * 0.5, parallaxY * 0.4)
+        local mx, my = love.mouse.getPosition()
+        local px = (max(0, min(base_width, (mx-offset_x)/scale_factor)) - base_width/2) * 0.05
+        local py = (max(0, min(base_height, (my-offset_y)/scale_factor)) - base_height/2) * 0.05
+        drawScrollingBG(menu_finished, bgX1, bgX2, px*0.5, py*0.4)
     end
 
     if gamestate == "menuscreen" then
         draw_menuscreen()
-        love.graphics.setColor(1, 1, 1)
+    elseif gamestate == "selection" then
+        selection()
     elseif gamestate == "test" then
         sounds.buildUPSound:stop()
         sounds.green_hill:play()
         love.graphics.setColor(currentColor)
-        drawScrollingBG(emhi_bg, bgX1, bgX2, 0, 0)
-        love.graphics.setColor(1, 1, 1)
+        drawScrollingBG(emhi_bg, bgX1, bgX2, 0,0)
+        love.graphics.setColor(1,1,1)
 
         love.graphics.push()
-        love.graphics.translate(-math.floor(camera.x + 0.5), -math.floor(camera.y + 0.5))
-        love.graphics.draw(test2, 0, 0)
-
-        if sonic_demoexe.currentSprite then
-            love.graphics.draw(sonic_demoexe.currentSprite, 10948, 730)
-        end
-
+        love.graphics.translate(-camX, -camY)
+        love.graphics.draw(mapImages.test2, 0,0)
+        if sonic_demoexe.currentSprite then love.graphics.draw(sonic_demoexe.currentSprite,10948,730) end
         tails_tail_thing()
-        char_draw(tails, 0, 2)
+        char_draw(tails,0,2)
         love.graphics.pop()
 
         drawStats()
         drawStageTitle(greenHillZoneTitle, greenHillZoneCircles, stageActImg1)
-        love.graphics.setColor(1, 1, 1)
+
     elseif gamestate == "hs" then
         love.graphics.push()
-        if bushes_destroyed then
-            love.graphics.draw(fire_bg.currentSprite, 0, 0)
-        end
-        love.graphics.translate(-math.floor(camera.x + 0.5), -math.floor(camera.y + 0.5))
-        love.graphics.draw(test3, 0, 0)
-
+        if bushes_destroyed then love.graphics.draw(fire_bg.currentSprite,0,0) end
+        love.graphics.translate(-camX, -camY)
+        love.graphics.draw(mapImages.test3,0,0)
         if not tails_caught2 and tails.currentSprite then
             tails_tail_thing()
-            char_draw(tails, 0, 2)
+            char_draw(tails,0,2)
         end
-
-        for _, bush in ipairs(bushes) do
-            love.graphics.draw(bush_img, bush.x, bush.y)
-        end
-
-        char_draw(sonic_demoexe, 0, 2)
+        for _,b in ipairs(bushes) do love.graphics.draw(bush_img,b.x,b.y) end
+        char_draw(sonic_demoexe,0,2)
         love.graphics.pop()
 
         drawStats()
-
         if not bushes_destroyed then
-            local timerText = string.format("HIDING TIME LEFT: %.1f", hs_timer)
-            local timerWidth = love.graphics.getFont():getWidth(timerText)
-            love.graphics.setColor(0, 0, 0)
-            love.graphics.print(timerText, base_width - timerWidth - 17, 33)
-            love.graphics.setColor(1, 1, 0)
-            love.graphics.print(timerText, base_width - timerWidth - 20, 30)
+            local text = string.format("HIDING TIME LEFT: %.1f", hs_timer)
+            local w = Font:getWidth(text)
+            love.graphics.setColor(0,0,0)
+            love.graphics.print(text, base_width-w-17,33)
+            love.graphics.setColor(1,1,0)
+            love.graphics.print(text, base_width-w-20,30)
         end
-
         drawStageTitle(hideAndSeekZoneTitle, hideAndSeekZoneCircles, stageActImg2)
 
         if show_black_screen then
-            love.graphics.setColor(0, 0, 0, 1)
-            love.graphics.rectangle("fill", 0, 0, base_width, base_height)
+            love.graphics.setColor(0,0,0,1)
+            love.graphics.rectangle("fill",0,0, base_width, base_height)
+            love.graphics.setColor(1,1,1)
         end
-        love.graphics.setColor(1, 1, 1)
+
     elseif gamestate == "knuck" then
         love.graphics.push()
-        drawScrollingBG(knuck_bg, bgX1, bgX2, 0, 0)
-        love.graphics.translate(-math.floor(camera.x + 0.5), -math.floor(camera.y + 0.5))
-        love.graphics.draw(knuck1)
-        char_draw(knuckles, 0, -2)
-
-        if demo_vis then char_draw(sonic_demoexe, 0, -2) end
+        drawScrollingBG(knuck_bg,bgX1,bgX2,0,0)
+        love.graphics.translate(-camX,-camY)
+        love.graphics.draw(mapImages.knuck1)
+        char_draw(knuckles,0,-2)
+        if demo_vis then char_draw(sonic_demoexe,0,-2) end
         if stage1_vis then love.graphics.draw(stage1, 2544, 518) end
         if stage2_vis and s1.currentSprite then love.graphics.draw(s1.currentSprite, 4387, 864) end
         if stage3_vis then love.graphics.draw(stage3, 5481, 867) end
 
         if stage1_vis == false then
             if not soundPlayed10 then
-            sounds.rebootSound:play()
+            sounds.sound_fix:play()
             flashScreen(0.45)
             soundPlayed10 = true
             end
@@ -2349,7 +2346,7 @@ function love.draw()
 
         if stage3_vis == false then
             if not soundPlayed8 then
-            sounds.rebootSound:play()
+            sounds.sound_fix:play()
             flashScreen(0.45)
             soundPlayed8 = true
             end
@@ -2357,7 +2354,7 @@ function love.draw()
         
         if stage2_vis == false then
             if not soundPlayed9 then
-            sounds.rebootSound:play()
+            sounds.sound_fix:play()
             flashScreen(0.45)
             soundPlayed9 = true
             end
@@ -2370,123 +2367,112 @@ function love.draw()
             end
         end
         love.graphics.pop()
-
         if bossfightActive then
-            local timerText = string.format("TIME LEFT: %.1f", bossfightTimer)
-            local timerWidth = love.graphics.getFont():getWidth(timerText)
-            love.graphics.setColor(0, 0, 0)
-            love.graphics.print(timerText, base_width - timerWidth - 17, 33)
-            love.graphics.setColor(1, 1, 0)
-            love.graphics.print(timerText, base_width - timerWidth - 20, 30)
+            local text = string.format("TIME LEFT: %.1f", bossfightTimer)
+            local w = Font:getWidth(text)
+            love.graphics.setColor(0,0,0)
+            love.graphics.print(text, base_width-w-17,33)
+            love.graphics.setColor(1,1,0)
+            love.graphics.print(text, base_width-w-20,30)
             love.graphics.setColor(1, 1, 1)
         end
         drawStats()
         drawStageTitle(greenHillZoneTitle, hideAndSeekZoneCircles, stageActImg1)
 
         if blackScreen then
-            love.graphics.setColor(0, 0, 0, 1)
-            love.graphics.rectangle("fill", 0, 0, base_width, base_height)
-            love.graphics.setColor(1, 1, 1, 1)
-        end
-    elseif gamestate == "eggman" then
-        drawScrollingBG(menu, bgX1, bgX2, 0, 0)
-        love.graphics.push()
-        love.graphics.translate(-math.floor(camera.x + 0.5), -math.floor(camera.y + 0.5))
-        love.graphics.draw(egg_mob, 3200, 903)
-        love.graphics.draw(gh1, 0, 0)
-        char_draw(sonic_demoexe, 0, -2)
-        char_draw(eggman, 0, -8)
-        love.graphics.pop()
-        drawStats()
-        drawStageTitle(greenHillZoneTitle, labCircles, stageActImg1)
-
-        if crashing then
-            love.graphics.setColor(1, 1, 1, crashAlpha)
-            love.graphics.rectangle("fill", 0, 0, base_width, base_height)
+            love.graphics.setColor(0,0,0,1)
+            love.graphics.rectangle("fill",0,0, base_width, base_height)
         end
         love.graphics.setColor(1, 1, 1)
+    elseif gamestate == "eggman" then
+        if not crashing2 then drawScrollingBG(menu,bgX1,bgX2,0,0) end
+        love.graphics.push()
+        love.graphics.translate(-camX,-camY)
+        love.graphics.draw(egg_mob,3200,903)
+        love.graphics.draw(mapImages.gh1,0,0)
+        char_draw(sonic_demoexe,0,-2)
+        char_draw(eggman,0,-8)
+        love.graphics.pop()
+        if not crashing2 then
+            drawStats()
+            drawStageTitle(greenHillZoneTitle, labCircles, stageActImg1)
+        end
+        if crashing and not crashing2 then
+            love.graphics.setColor(1,1,1,crashAlpha)
+            love.graphics.rectangle("fill",0,0,base_width,base_height)
+        end
+
     elseif gamestate == "torture" and tort_visible then
-        love.graphics.setColor(1, 1, 1, 0.355)
+        love.graphics.setColor(1,1,1,0.355)
         if sonic_demoexe_screen.currentSprite then
             love.graphics.draw(sonic_demoexe_screen.currentSprite)
         end
-        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.setColor(1,1,1)
         local t = love.timer.getTime()
-        love.graphics.print("Ready to be", 125, 50 + math.sin(t*2)*2)
-        love.graphics.print("Tortured?", 285, 200 + math.sin(t*2.2)*3)
-        love.graphics.setColor(1, 1, 1)
-    elseif gamestate == "selection" then
-        selection()
-        love.graphics.setColor(1, 1, 1)
+        love.graphics.print("Ready to be",125,50+math.sin(t*2)*2)
+        love.graphics.print("Tortured?",285,200+math.sin(t*2.2)*3)
     elseif gamestate == "william" then
         draw_william()
         drawStageTitle(DotTitle, DotCircles, stageActImg1)
-        love.graphics.setColor(1, 1, 1)
     elseif gamestate == "error" then
         love.graphics.clear(0,0,0,1)
         if reboot_vis and not rebootDone then
-            for i = 1, currentStage do
+            for i=1,currentStage do
                 local stageText = loadingStages[i]
-                local text = i < currentStage and stageText.." 100%" or stageText.." "..math.floor(stageProgress).."%"
-                love.graphics.print(text, 20, 20 + (i-1)*20)
+                local text = i<currentStage and stageText.." 100%" or stageText.." "..floor(stageProgress).."%"
+                love.graphics.print(text,20,20+(i-1)*20)
             end
         elseif rebootDone then
-            love.graphics.setColor(0, 0, 0, fadeBlack)
-            love.graphics.rectangle("fill", 0, 0, base_width, base_height)
+            love.graphics.setColor(0,0,0,fadeBlack)
+            love.graphics.rectangle("fill",0,0,base_width,base_height)
             local t = love.timer.getTime()
-            if fadeBlack >= 1 then
+            if fadeBlack>=1 then
                 love.graphics.setFont(FontBig)
-                love.graphics.setColor(0.045, 0.045, 0.045, helloFade)
-                local text = "HELLO WILLIAM."
-                love.graphics.print(text, base_width/2 - FontBig:getWidth(text)/2, base_height/2 - FontBig:getHeight()/2 + math.sin(t*2.2)*3)
+                love.graphics.setColor(0.045,0.045,0.045,helloFade)
+                local text="HELLO WILLIAM."
+                love.graphics.print(text, base_width/2-FontBig:getWidth(text)/2, base_height/2-FontBig:getHeight()/2+math.sin(t*2.2)*3)
             end
         elseif reboot_vis2 then
             love.graphics.setFont(FontBig)
-            love.graphics.print("An Error has Occurred.", 20, 20)
+            love.graphics.print("An Error has Occurred.",20,20)
         end
-        love.graphics.setColor(1, 1, 1)
     elseif gamestate == "credits" then
-        for i, line in ipairs(credits_text) do
-            love.graphics.printf(line, 10, credits_y + (i - 1) * line_height, base_width - 20, "center")
+        for i,line in ipairs(credits_text) do
+            love.graphics.printf(line,10,credits_y+(i-1)*line_height, base_width-20,"center")
         end
     elseif gamestate == "doc" then
         love.graphics.setColor(1,1,1,message_alpha)
-        love.graphics.printf("Press Enter to open the Document", 0, base_height/2, base_width, "center")
+        love.graphics.printf("Press Enter to open the Document",0,base_height/2,base_width,"center")
     elseif gamestate == "warning" then
-        love.graphics.printf("WARNING!\nThis game contains flash light and it might also be buggy as well, which will be fixed in the very next updates of the game.\n\nPress start to play.", 0, base_height/2 - 45, base_width, "center")
+        love.graphics.printf("WARNING!\nThis game contains flash light ...",0,base_height/2-45,base_width,"center")
     elseif gamestate == "cheating" then
-        love.graphics.setColor(1, 1, 1, cheating_alpha)
+        love.graphics.setColor(1,1,1,cheating_alpha)
         if sonic_demoexe_screen.currentSprite and cheating_vis then
             love.graphics.draw(sonic_demoexe_screen.currentSprite)
         end
-
-        love.graphics.setColor(1, 1, 1, cheating_alpha2)
+        love.graphics.setColor(1,1,1,cheating_alpha2)
         local t = love.timer.getTime()
         if cheating_vis2 then
-            love.graphics.print("How dare you cheat within my realm, my game.", 40, 50 + math.sin(t*2.5)*3)
-            love.graphics.print("I won't let you escape from your fate that easily.", 75, 157 + math.sin(t*2)*2)
+            love.graphics.print("How dare you cheat ...",40,50+math.sin(t*2.5)*3)
+            love.graphics.print("I won't let you escape ...",75,157+math.sin(t*2)*2)
         end
     elseif gamestate == "testmap" then
         love.graphics.push()
-        love.graphics.translate(-math.floor(camera.x + 0.5), -math.floor(camera.y + 0.5))
-        love.graphics.draw(testmap, 0, 0)
-        char_draw(test_character, 0, -2)
+        love.graphics.translate(-camX,-camY)
+        love.graphics.draw(mapImages.testmap,0,0)
+        char_draw(test_character,0,-2)
         love.graphics.pop()
         drawStats()
     end
 
-    if transitionAlpha > 0 then
-        drawTransition(transitionAlpha)
-    end
+    if transitionAlpha>0 then drawTransition(transitionAlpha) end
     if isFlashing then
-        love.graphics.setColor(1, 1, 1, flashAlpha)
-        love.graphics.rectangle("fill", 0, 0, base_width * 2, base_height * 2)
+        love.graphics.setColor(1,1,1,flashAlpha)
+        love.graphics.rectangle("fill",0,0, base_width*2, base_height*2)
     end
 
     love.graphics.setColor(1, 1, 1, 1)
-    if isMobile then
-        mobile_stuff_draw()
-    end
+    if isMobile then mobile_stuff_draw() end
     love.graphics.setCanvas()
     love.graphics.draw(canvas, offset_x, offset_y, 0, scale_factor, scale_factor)
 end
@@ -2494,39 +2480,45 @@ end
 function quantizeColor(r, g, b, levels)
     levels = levels or 4
     local step = 1 / (levels - 1)
-    local qr = math.floor(r / step + 0.5) * step
-    local qg = math.floor(g / step + 0.5) * step
-    local qb = math.floor(b / step + 0.5) * step
+    local qr = floor(r / step + 0.5) * step
+    local qg = floor(g / step + 0.5) * step
+    local qb = floor(b / step + 0.5) * step
     return qr, qg, qb
 end
 
 function drawTransition(alpha)
     local levels = 4
-    transitionCanvas:renderTo(function()
-        love.graphics.clear()
-        love.graphics.setColor(1,1,1)
-        love.graphics.draw(canvas)
-    end)
-    local r1,g1,b1, r2,g2,b2
+    if transitioning or colorLerp ~= lastColorLerp then
+        transitionCanvas:renderTo(function()
+            love.graphics.clear()
+            love.graphics.setColor(1, 1, 1)
+            love.graphics.draw(canvas)
+        end)
+        lastColorLerp = colorLerp
+    end
+    local r1, g1, b1, r2, g2, b2
     if transitioning then
-        r1,g1,b1 = 1,1,1
-        r2,g2,b2 = 0,0,1
+        r1, g1, b1 = 1, 1, 1
+        r2, g2, b2 = 0, 0, 1
     else
-        r1,g1,b1 = 0,0,1
-        r2,g2,b2 = 1,1,1
+        r1, g1, b1 = 0, 0, 1
+        r2, g2, b2 = 1, 1, 1
     end
 
     local r = r1 + (r2 - r1) * colorLerp
     local g = g1 + (g2 - g1) * colorLerp
     local b = b1 + (b2 - b1) * colorLerp
 
-    love.graphics.setColor(quantizeColor(r, g, b, levels))
+    local qr, qg, qb = quantizeColor(r, g, b, levels)
     love.graphics.setBlendMode("multiply", "premultiplied")
+    love.graphics.setColor(qr, qg, qb)
     love.graphics.draw(transitionCanvas)
     love.graphics.setBlendMode("alpha")
-    love.graphics.setColor(0, 0, 0, alpha)
-    love.graphics.rectangle("fill", 0, 0, base_width, base_height)
-    love.graphics.setColor(1,1,1,1)
+    if alpha > 0 then
+        love.graphics.setColor(0, 0, 0, alpha)
+        love.graphics.rectangle("fill", 0, 0, base_width, base_height)
+    end
+    love.graphics.setColor(1, 1, 1, 1)
 end
 
 function drawStats()
@@ -2535,8 +2527,8 @@ function drawStats()
     love.graphics.draw(images.score, x, y)
     drawNumberString(x + 100, y - 1, tostring(stats.score))
 
-    local minutes = math.floor(gameTime / 60)
-    local seconds = math.floor(gameTime % 60)
+    local minutes = floor(gameTime / 60)
+    local seconds = floor(gameTime % 60)
     local timeStr = string.format("%d:%02d", minutes, seconds)
 
     love.graphics.draw(images.time, x, y + 16)
@@ -2551,10 +2543,10 @@ end
 function love.keyreleased(key)
     if gamestate == "selection" then
         if key == "right" then
-          selectionIndex = math.min(#selectionOptions, selectionIndex + 1)
+          selectionIndex = min(#selectionOptions, selectionIndex + 1)
           sounds.reboot_old:play()
         elseif key == "left" then
-          selectionIndex = math.max(1, selectionIndex - 1)
+          selectionIndex = max(1, selectionIndex - 1)
           sounds.reboot_old:play()
         end
     end
@@ -2570,86 +2562,75 @@ function updateCanvasScale()
     local scale_y = window_height / base_height
 
     if isMobile then
-        scale_factor = math.min(scale_x, scale_y)
+        scale_factor = min(scale_x, scale_y)
     else
-        scale_factor = math.floor(math.min(scale_x, scale_y) + 0.5)
+        scale_factor = floor(min(scale_x, scale_y) + 0.5)
         if scale_factor < 1 then scale_factor = 1 end
     end
 
     local scaled_width = base_width * scale_factor
     local scaled_height = base_height * scale_factor
-    offset_x = math.floor((window_width - scaled_width) / 2 + 0.5)
-    offset_y = math.floor((window_height - scaled_height) / 2 + 0.5)
+    offset_x = floor((window_width - scaled_width) / 2 + 0.5)
+    offset_y = floor((window_height - scaled_height) / 2 + 0.5)
 
-    offset_x = math.max(0, offset_x)
-    offset_y = math.max(0, offset_y)
+    offset_x = max(0, offset_x)
+    offset_y = max(0, offset_y)
 end
 
 local cameraTouchID = nil
 local joystickTouchID = nil
 local lastTouchX, lastTouchY = nil, nil
 
+function normalizeCoords(x, y)
+    return (x - offset_x) / scale_factor, (y - offset_y) / scale_factor
+end
+
+function updateJoystick(x, y)
+    local dx, dy = x - joystick.x, y - joystick.y
+    local len = dx * dx + dy * dy
+    local maxDist = joystick.radius
+    if len > maxDist * maxDist and len > 0 then
+        local scale = maxDist / math.sqrt(len)
+        dx, dy = dx * scale, dy * scale
+    end
+    joystick.dx, joystick.dy = dx / maxDist, dy / maxDist
+end
+
 function love.touchpressed(id, x, y)
     if not isMobile then return end
 
-    x = (x - offset_x) / scale_factor
-    y = (y - offset_y) / scale_factor
+    x, y = normalizeCoords(x, y)
     touches[id] = {x=x, y=y}
 
-    if x <= base_width / 2 then
+    if x <= base_width * 0.5 then
         if not joystickTouchID then
             joystickTouchID = id
             joystick.active = true
-            local dx = x - joystick.x
-            local dy = y - joystick.y
-            local len = math.sqrt(dx*dx + dy*dy)
-            local maxDist = joystick.radius
-            if len > maxDist and len > 0 then
-                dx = dx / len * maxDist
-                dy = dy / len * maxDist
-            end
-            joystick.dx = dx / joystick.radius
-            joystick.dy = dy / joystick.radius
+            updateJoystick(x, y)
         end
         return
     end
-
-    if x > base_width / 2 then
-        if not cameraTouchID and gamestate == "william" then
-            cameraTouchID = id
-            lastTouchX, lastTouchY = x, y
-            return
-        end
+    if not cameraTouchID and gamestate == "william" then
+        cameraTouchID = id
+        lastTouchX, lastTouchY = x, y
+    else
         jumpButton.active = true
-        return
     end
 end
 
 function love.touchmoved(id, x, y)
     if not isMobile or not touches[id] then return end
 
-    x = (x - offset_x) / scale_factor
-    y = (y - offset_y) / scale_factor
+    x, y = normalizeCoords(x, y)
     touches[id].x, touches[id].y = x, y
 
-    if joystick.active and id == joystickTouchID then
-        local dx = x - joystick.x
-        local dy = y - joystick.y
-        local len = math.sqrt(dx*dx + dy*dy)
-        local maxDist = joystick.radius
-        if len > maxDist and len > 0 then
-            dx = dx / len * maxDist
-            dy = dy / len * maxDist
-        end
-        joystick.dx = dx / joystick.radius
-        joystick.dy = dy / joystick.radius
-    end
-    if id == cameraTouchID and gamestate == "william" then
-        local dx = x - lastTouchX
-        local dy = y - lastTouchY
-        targetYaw = targetYaw - dx * mouseSensitivity
-        targetPitch = math.max(-math.pi/2, math.min(math.pi/2, targetPitch + dy * mouseSensitivity))
-        targetRoll = math.max(-0.15, math.min(0.15, -dx * rollStrength))
+    if id == joystickTouchID and joystick.active then
+        updateJoystick(x, y)
+    elseif id == cameraTouchID and gamestate == "william" then
+        local dx, dy = x - lastTouchX, y - lastTouchY
+        targetYaw   = targetYaw - dx * mouseSensitivity
+        targetPitch = max(-math.pi*0.5, min(math.pi*0.5, targetPitch + dy * mouseSensitivity))
+        targetRoll  = max(-0.15, min(0.15, -dx * rollStrength))
         lastTouchX, lastTouchY = x, y
     end
 end
@@ -2662,23 +2643,15 @@ function love.touchreleased(id, x, y)
         joystickTouchID = nil
         joystick.active = false
         joystick.dx, joystick.dy = 0, 0
+    elseif id == cameraTouchID and gamestate == "william" then
+        cameraTouchID, lastTouchX, lastTouchY = nil, nil, nil
     end
-
-    if id == cameraTouchID and gamestate == "william" then
-        cameraTouchID = nil
-        lastTouchX, lastTouchY = nil, nil
-    end
-
-    local rightActive = false
     for _, t in pairs(touches) do
-        if t.x and t.x > base_width / 2 then
-            rightActive = true
-            break
+        if t.x and t.x > base_width * 0.5 then
+            return
         end
     end
-    if not rightActive then
-        jumpButton.active = false
-    end
+    jumpButton.active = false
 end
 
 function sign(x)
@@ -2692,7 +2665,7 @@ function sign(x)
 end
 
 function quantize(v)
-    if math.abs(v) < 0.25 then
+    if abs(v) < 0.25 then
         return 0
     elseif v > 0 then
         return 1
