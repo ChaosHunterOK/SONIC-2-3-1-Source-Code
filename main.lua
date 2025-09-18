@@ -10,8 +10,10 @@ love.graphics.setDefaultFilter("nearest", "nearest")
 Font = fast.getFont("font/font.ttf", 16)
 FontBig = fast.getFont("font/font.ttf", 32)
 
+local base_width, base_height = 500, 250
 function love.errhand(msg)
     love.graphics.reset()
+    local screenW, screenH = love.graphics.getWidth(), love.graphics.getHeight()
     love.graphics.setFont(Font)
     errorMessage = tostring(msg)
     image = love.graphics.newImage("images/error.png")
@@ -41,8 +43,7 @@ function love.errhand(msg)
 
         love.graphics.setColor(1,1,1)
         if image then
-            love.graphics.setDefaultFilter("nearest", "nearest")
-            love.graphics.draw(image, 0, 0, 0, 2, 2)
+            love.graphics.draw(image, 0, 0, 0, screenW / image:getWidth(), screenH / image:getHeight())
         end
 
         local xOffset = 550
@@ -82,7 +83,6 @@ end
 gravity = 625
 
 local floor, abs, min, max, atan2, deg = math.floor, math.abs, math.min, math.max, math.atan2, math.deg
-local base_width, base_height = 500, 250
 local thing = 650
 local camera = {x = 0, y = 0, targetX = 0, targetY = 0}
 local camera_3d = {x = thing / 2, y = 5, z = thing / 2, yaw = 0, pitch = 0, roll = 0}
@@ -236,7 +236,9 @@ local function createCharacter(opts)
         targetX = 0,
         targetY = 0,
         fakeAngle = 0,
-        physics_enabled = false
+        _coyote = 0,
+        _jumpBuf = 0,
+        physics_enabled = opts.physics_enabled or false
     }
 end
 
@@ -722,6 +724,13 @@ function cheating(dt)
     end
 end
 
+local crashing = false
+local crashing2 = false
+local crashTimer = 0
+local crashAlpha = 0
+local crashMaxAlpha = 0.5
+local fadeDuration = 0.25
+
 local JOYSTICK_MOVE_THRESHOLD = 0.25
 local JOYSTICK_LOOK_THRESHOLD = 0.35
 
@@ -739,16 +748,8 @@ function getControls()
     return moveRight, moveLeft, jump, lookUp, lookDown
 end
 
-local crashing = false
-local crashing2 = false
-local crashTimer = 0
-local crashAlpha = 0
-local crashMaxAlpha = 0.5
-local fadeDuration = 0.25
-
 TOP_SPEED, GROUND_ACCEL, GROUND_DECEL = 220, 780, 1500
-GROUND_FRICTION, AIR_ACCEL, AIR_DECEL = 1300, 420, 360
-GRAVITY_NORMAL, GRAVITY_JUMP_HOLD, GRAVITY_FASTFALL = 1000, 600, 1400
+GROUND_FRICTION, AIR_ACCEL, AIR_DECEL = 1300, 400, 360
 JUMP_VELOCITY, JUMP_HOLD_TIME, COYOTE_TIME, JUMP_BUFFER = -310, 0.18, 0.10, 0.10
 AIR_DRAG, MAX_STEP_HEIGHT = 0.99609375, 10
 
@@ -793,55 +794,66 @@ function getGroundY(char, map, baseX, baseY)
     return nil
 end
 
+SNAP_SPEED = 300
 function snapToGround(char, map, dt)
     if char.jumping then
         char.grounded = false
         return false
     end
     local groundY = getGroundY(char, map, char.x, char.y)
-    if groundY then
-        char.y = approach(char.y, groundY, 300 * dt)
-        char.grounded = abs(char.y - groundY) < 1
-        if char.grounded and char.velocity.y > 0 then
-            char.velocity.y = 0
-        end
-        return true
-    else
+    if not groundY then
         char.grounded = false
         return false
     end
+
+    char.y = approach(char.y, groundY, SNAP_SPEED * dt)
+    local distance = abs(char.y - groundY)
+    char.grounded = distance < 1
+    if char.grounded and char.velocity.y > 0 then
+        char.velocity.y = 0
+    end
+
+    return true
 end
 
-function getVelocityAngle(vx, vy)
-    if vx == 0 and vy == 0 then return nil end
-    return deg(atan2(vy, vx)) % 360
+function getGroundSlope(char, map, x, y)
+    local step = 2
+    local yL = getGroundY(char, map, x - step, y)
+    local yR = getGroundY(char, map, x + step, y)
+
+    if yL and yR then
+        local dy = yR - yL
+        local dx = (step * 2)
+        return atan2(dy, dx)
+    end
+    return 0
+end
+
+function applySlopePhysics(char, vx, vy, slopeAngle, dt)
+    local speed = vx
+    local sinA, cosA = math.sin(slopeAngle), math.cos(slopeAngle)
+    local vxs = speed * cosA
+    local vys = speed * sinA
+    vy = vy + 400 * dt  
+
+    return vxs, vy + vys
 end
 
 GROUND_FRICTION = 0.125
 local CAM_HZ_BOUND, CAM_VT_BOUND = 16, 48
 function updateCamera(dt, char, mapWidth, mapHeight)
-    local targetX = camera.x
-    local targetY = camera.y
-
+    local targetX, targetY = camera.x, camera.y
     local screenCenterX = camera.x + base_width / 2
-    if char.x > screenCenterX + CAM_HZ_BOUND then
-        targetX = targetX + (char.x - (screenCenterX + CAM_HZ_BOUND))
-    elseif char.x < screenCenterX - CAM_HZ_BOUND then
-        targetX = targetX - ((screenCenterX - CAM_HZ_BOUND) - char.x)
-    end
-
     local screenCenterY = camera.y + base_height / 2
-    if char.y > screenCenterY + CAM_VT_BOUND then
-        targetY = targetY + (char.y - (screenCenterY + CAM_VT_BOUND))
-    elseif char.y < screenCenterY - CAM_VT_BOUND then
-        targetY = targetY - ((screenCenterY - CAM_VT_BOUND) - char.y)
-    end
 
-    targetX = clamp(targetX, 0, mapWidth - base_width)
-    targetY = clamp(targetY, 0, mapHeight - base_height)
+    if char.x > screenCenterX + CAM_HZ_BOUND then targetX = targetX + (char.x - (screenCenterX + CAM_HZ_BOUND))
+    elseif char.x < screenCenterX - CAM_HZ_BOUND then targetX = targetX - ((screenCenterX - CAM_HZ_BOUND) - char.x) end
 
-    camera.x = floor(targetX + 0.5)
-    camera.y = floor(targetY + 0.5)
+    if char.y > screenCenterY + CAM_VT_BOUND then targetY = targetY + (char.y - (screenCenterY + CAM_VT_BOUND))
+    elseif char.y < screenCenterY - CAM_VT_BOUND then targetY = targetY - ((screenCenterY - CAM_VT_BOUND) - char.y) end
+
+    camera.x = floor(clamp(targetX, 0, mapWidth - base_width) + 0.5)
+    camera.y = floor(clamp(targetY, 0, mapHeight - base_height) + 0.5)
 end
 
 local tails_caught = false
@@ -870,17 +882,8 @@ function test_update(dt, char, map)
     snapToGround(char, map, dt)
     local grounded = char.grounded
 
-    if grounded then
-        char._coyote = COYOTE_TIME
-    else
-        char._coyote = math.max(0, char._coyote - dt)
-    end
-
-    if jump then
-        char._jumpBuf = JUMP_BUFFER
-    else
-        char._jumpBuf = math.max(0, char._jumpBuf - dt)
-    end
+    char._coyote = grounded and COYOTE_TIME or math.max(0, char._coyote - dt)
+    char._jumpBuf = jump and JUMP_BUFFER or math.max(0, char._jumpBuf - dt)
 
     if char == sonic_demoexe and isDemoWithPhysics then
         if char.grounded then
@@ -902,11 +905,25 @@ function test_update(dt, char, map)
                 char.fakeAngle = 0
             elseif moveRight or moveLeft then
                 char.direction = moveRight and 1 or -1
-                local accel = char.acceleration or 600
-                local maxS = char.maxSpeed or 200
-                vx = vx + accel * inputDir * dt
-                vx = clamp(vx, -maxS, maxS)
+                local accel = char.acceleration
+                local maxS = char.maxSpeed
+                vx = clamp(vx + accel * inputDir * dt, -maxS, maxS)
             else
+                if grounded then
+                    local slopeAngle = getGroundSlope(char, map, char.x, char.y)
+                    vx, vy = applySlopePhysics(char, vx, vy, slopeAngle, dt)
+                    if inputDir ~= 0 then
+                        vx = clamp(vx + GROUND_ACCEL * inputDir * dt, -TOP_SPEED, TOP_SPEED)
+                    else
+                        vx = approach(vx, 0, GROUND_FRICTION * dt)
+                    end
+                else
+                    if inputDir ~= 0 then
+                        vx = clamp(vx + AIR_ACCEL * inputDir * dt, -TOP_SPEED, TOP_SPEED)
+                    else
+                        vx = approach(vx, 0, AIR_DECEL * dt)
+                    end
+                end
                 if grounded then
                     vx = vx * (1 - GROUND_FRICTION)
                     if math.abs(vx) < 0.1 then
@@ -922,7 +939,7 @@ function test_update(dt, char, map)
                 end
             end
             if jump and grounded then
-                vy = char.jumpHeight or -300
+                vy = char.jumpHeight
                 char.angle = 0
                 char.fakeAngle = 0
                 if char.jump then updateSprite(dt, char.jump, char) end
@@ -931,8 +948,33 @@ function test_update(dt, char, map)
                 if sounds and sounds.jump_sound then sounds.jump_sound:play() end
             end
 
+            if (char._jumpBuf > 0 and char._coyote > 0 and not char.jumping) then
+                vy = char.jumpHeight
+                char.jumping, char.grounded = true, false
+                char._jumpBuf = 0
+                if char.jump then updateSprite(dt, char.jump, char) end
+                if sounds and sounds.jump_sound then sounds.jump_sound:play() end
+            end
+
+            if jump and grounded then
+                local slopeAngle = getGroundSlope(char, map, char.x, char.y)
+                vx = vx + JUMP_VELOCITY * math.sin(slopeAngle) * -1
+                vy = JUMP_VELOCITY * math.cos(slopeAngle) -50
+                char.jumping, char.grounded = true, false
+            end
+
             local absVx = math.abs(vx)
-            if char.jumping then
+            if not char.grounded then
+                if char.jumping then
+                    if char.jump then updateSprite(dt, char.jump, char) end
+                else
+                    if char.walk then
+                        updateSprite(dt * 0.75, char.walk, char)
+                    else
+                        char.currentSprite = char.jump or char.idle
+                    end
+                end
+            elseif not jump and char.jumping and vy < 0 then
                 if char.jump then updateSprite(dt, char.jump, char) end
             elseif char.grounded and lookUp and vx == 0 then
                 char.currentSprite = char.up or char.idle
@@ -953,14 +995,7 @@ function test_update(dt, char, map)
                 end
             end
         end
-    if (char._jumpBuf > 0 and char._coyote > 0 and not char.jumping) then
-        vy = char.jumpHeight or -300
-        char.jumping = true
-        char.grounded = false
-        char._jumpBuf = 0
-        if char.jump then updateSprite(dt, char.jump, char) end
-        if sounds and sounds.jump_sound then sounds.jump_sound:play() end
-    end
+
     if not char.grounded then
         vy = vy + (char.jumping and 625 or 400) * dt
         vx = vx * AIR_DRAG
@@ -998,11 +1033,11 @@ function test_update(dt, char, map)
     end
 
     char.x = clamp(char.x, 15, mapWidth - 15)
+    char.velocity.x, char.velocity.y = vx, vy
     if char ~= sonic_demoexe then
         if char.y >= mapHeight + 40 then love.event.quit() end
         updateCamera(dt, char, mapWidth, mapHeight)
     end
-    char.velocity.x, char.velocity.y = vx, vy
     updateGamestate(dt, char)
 end
 
