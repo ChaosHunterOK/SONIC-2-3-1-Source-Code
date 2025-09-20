@@ -72,7 +72,7 @@ local startTime = os.time()
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "test"
+local gamestate = "menuscreen"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -95,6 +95,7 @@ local canvas
 scale_factor = 1
 offset_x = 0
 offset_y = 0
+resizeFreezeTimer = 0
 
 rebooting_Vis, rebootingTimer, lastPlayedCycle = false, 0, -1
 
@@ -304,10 +305,10 @@ local selectionAlpha = 0
 
 local frames = loadFrames(spritesFolder .. "menuscreen/", 6)
 local repeatable_frames = loadFrames(spritesFolder .. "menuscreen/repeatble/", 2)
-local repeatable2_frames = loadFrames(spritesFolder .. "menuscreen/repeatble2/", 2)
+local repeatable2_frames = loadFrames(spritesFolder .. "menuscreen/lookin/", 25)
 
 local splash_frames = {}
-splash_frames.splash = loadFrames(spritesFolder .. "menuscreen/splash2/", 13)
+splash_frames.splash = loadFrames(spritesFolder .. "menuscreen/lookin/", 25)
 splash_frames.idle = loadFrames(spritesFolder .. "menuscreen/play/", 6)
 
 local fire_bg = createCharacter{}
@@ -1432,24 +1433,42 @@ end
 
 animHandlers.screen = function(dt)
     animation_timer3 = animation_timer3 + dt
-    if animation_timer3 >= 0.0001 then
+    if animation_timer3 >= 0.1 then
         animation_phase = "repeatable2"
     end
 end
 
+local repeatable2_timer = 0
+local repeatable2_frame_duration = 0.075
+local bg_vis = true
+
 animHandlers.repeatable2 = function(dt)
-    sounds.sonic_theme:stop()
-    frame_index = (frame_index % #repeatable2_frames) + 1
-    repeat_count = repeat_count + 1
-    if repeat_count >= max_final_repeats * #repeatable2_frames then
-        repeat_count = 0
-        animation_phase = "black_screen"
+    repeatable2_timer = repeatable2_timer + dt
+    if repeatable2_timer >= repeatable2_frame_duration then
+        repeatable2_timer = repeatable2_timer - repeatable2_frame_duration
+
+        frame_index = (frame_index % #repeatable2_frames) + 1
+        repeat_count = repeat_count + 1
+
+        if repeat_count == 23 then
+            sounds.cr4sh_sound:setLooping(true)
+            sounds.cr4sh_sound:play()
+            bg_vis = false
+            menu2 = fast.getImage("images/background/menu3.png")
+        end
+
+        if repeat_count >= #repeatable2_frames then
+            repeat_count = 0
+            animation_phase = "black_screen"
+        end
     end
 end
 
 animHandlers.black_screen = function(dt)
+    sounds.cr4sh_sound:stop()
+    bg_vis = true
     animation_timer2 = animation_timer2 + dt
-    if animation_timer2 >= 0.0001 then
+    if animation_timer2 >= 0.2 then
         finished_transformation = true
         animation_phase = "done"
         frame_index3 = 1
@@ -1481,8 +1500,8 @@ function menuscreen_update(dt)
         animHandlers[animation_phase](dt)
     end
 
-    if finished_transformation and not splash_done then
-        splash_timer = splash_timer + dt
+    --[[if finished_transformation and not splash_done then
+        splash_timer = splash_timer + dt * 2
         if splash_timer >= 0.2011 then
             splash_timer = 0
             frame_index3 = frame_index3 + 1
@@ -1491,7 +1510,9 @@ function menuscreen_update(dt)
                 splash_done = true
             end
         end
-    end
+    end]]
+
+    splash_done = true
 
     if splash_done then
         frameCounter = frameCounter + 1
@@ -1651,7 +1672,7 @@ local returnPressed = false
 errorSoundPlayed = false
 
 local function updateScrollingBG(dt)
-    if animation_phase == "initial" then return end
+    if animation_phase == "initial" or not bg_vis then return end
 
     local width = menu:getWidth()
     bgX1, bgX2 = bgX1 + scroll_speed * dt, bgX2 + scroll_speed * dt
@@ -1752,6 +1773,13 @@ local gamestateHandlers = {
 }
 
 function love.update(dt)
+    if resizeFreezeTimer > 0 then
+        resizeFreezeTimer = resizeFreezeTimer - dt
+        if resizeFreezeTimer < 0 then
+            resizeFreezeTimer = 0
+        end
+        return
+    end
     gameTime = gameTime + dt
     if ok and discord then
         discord.runCallbacks()
@@ -2241,6 +2269,7 @@ function draw_menuscreen()
     elseif animation_phase == "repeatable" then
         love.graphics.draw(repeatable_frames[frame_index], demoX, demoY - 10)
     elseif animation_phase == "repeatable2" then
+        sounds.sonic_theme:stop()
         love.graphics.draw(repeatable2_frames[frame_index], demoX, demoY - 10)
     end
 
@@ -2648,6 +2677,7 @@ end
 
 function love.resize(w, h)
     updateCanvasScale()
+    resizeFreezeTimer = 0.5
 end
 
 function updateCanvasScale()
@@ -2655,20 +2685,16 @@ function updateCanvasScale()
     local scale_x = window_width / base_width
     local scale_y = window_height / base_height
 
-    if isMobile then
-        scale_factor = min(scale_x, scale_y)
-    else
-        scale_factor = floor(min(scale_x, scale_y) + 0.5)
-        if scale_factor < 1 then scale_factor = 1 end
-    end
+    scale_factor = math.min(scale_x, scale_y)
 
     local scaled_width = base_width * scale_factor
     local scaled_height = base_height * scale_factor
-    offset_x = floor((window_width - scaled_width) / 2 + 0.5)
-    offset_y = floor((window_height - scaled_height) / 2 + 0.5)
 
-    offset_x = max(0, offset_x)
-    offset_y = max(0, offset_y)
+    offset_x = math.floor((window_width - scaled_width) / 2 + 0.5)
+    offset_y = math.floor((window_height - scaled_height) / 2 + 0.5)
+
+    offset_x = math.max(0, offset_x)
+    offset_y = math.max(0, offset_y)
 end
 
 local cameraTouchID = nil
