@@ -4,7 +4,6 @@ fast.fpsCap = 60
 
 local buttons = {"Copy", "Quit"}
 local selected = 1
-local errorMessage = ""
 love.graphics.setDefaultFilter("nearest", "nearest")
 
 Font = fast.getFont("font/font.ttf", 16)
@@ -15,22 +14,25 @@ function love.errhand(msg)
     love.graphics.reset()
     local screenW, screenH = love.graphics.getWidth(), love.graphics.getHeight()
     love.graphics.setFont(Font)
-    errorMessage = tostring(msg)
-    image = love.graphics.newImage("images/error.png")
+
+    local errorMessage = tostring(msg)
+    local image = love.graphics.newImage("images/error.png")
     image:setFilter("nearest", "nearest")
+
+    local xOffset = 550
+    local btnY = screenH - 100
+    local btnSpacing = 100
 
     while true do
         love.event.pump()
-        for e,a,b,c,d in love.event.poll() do
-            if e == "quit" then
-                return
-            elseif e == "keypressed" then
+        for e, a in love.event.poll() do
+            if e == "quit" then return end
+
+            if e == "keypressed" then
                 if a == "right" then
-                    selected = selected + 1
-                    if selected > #buttons then selected = 1 end
+                    selected = (selected % #buttons) + 1
                 elseif a == "left" then
-                    selected = selected - 1
-                    if selected < 1 then selected = #buttons end
+                    selected = (selected - 2) % #buttons + 1
                 elseif a == "return" or a == "kpenter" then
                     if buttons[selected] == "Copy" then
                         love.system.setClipboardText(errorMessage)
@@ -40,25 +42,22 @@ function love.errhand(msg)
                 end
             end
         end
-
         love.graphics.setColor(1,1,1)
+
         if image then
-            love.graphics.draw(image, 0, 0, 0, screenW / image:getWidth(), screenH / image:getHeight())
+            local scaleX = screenW / image:getWidth()
+            local scaleY = screenH / image:getHeight()
+            love.graphics.draw(image, 0, 0, 0, scaleX, scaleY)
         end
 
-        local xOffset = 550
-        love.graphics.printf(errorMessage, xOffset, 100, love.graphics.getWidth() - xOffset - 50, "left")
-        local btnY = love.graphics.getHeight() - 100
+        love.graphics.printf(errorMessage, xOffset, 100, screenW - xOffset - 50, "left")
+        love.graphics.printf("DM copilucusarmale on Discord to report this goofy error", xOffset, 35, screenW - xOffset - 50, "left")
+
         local btnX = xOffset
-        love.graphics.printf("DM copilucusarmale on Discord to report this goofy error", xOffset, 35, love.graphics.getWidth() - xOffset - 50, "left")
-        for i,btn in ipairs(buttons) do
-            if i == selected then
-                love.graphics.setColor(1,0.5,0)
-            else
-                love.graphics.setColor(1,1,1)
-            end
+        for i, btn in ipairs(buttons) do
+            love.graphics.setColor(i == selected and {1,0.5,0} or {1,1,1})
             love.graphics.print(btn, btnX, btnY)
-            btnX = btnX + 100
+            btnX = btnX + btnSpacing
         end
 
         love.graphics.present()
