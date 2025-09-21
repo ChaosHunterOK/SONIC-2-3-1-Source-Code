@@ -72,7 +72,7 @@ local startTime = os.time()
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "menuscreen"
+local gamestate = "knuck"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -84,7 +84,7 @@ gravity = 625
 
 local floor, abs, min, max, atan2, deg = math.floor, math.abs, math.min, math.max, math.atan2, math.deg
 local thing = 650
-local camera = {x = 0, y = 0, targetX = 0, targetY = 0}
+local camera = {x = 0, y = 0, targetX = 0, targetY = 0, locked = false}
 local camera_3d = {x = thing / 2, y = 5, z = thing / 2, yaw = 0, pitch = 0, roll = 0}
 local chaser = {x = -200, y = 0, z = -200, speed = 23}
 
@@ -408,6 +408,7 @@ sonic_demoexe.walk = loadFrames(spritesFolder .. "sonic_demo.exe/walk/", 6)
 sonic_demoexe.fly = loadFrames(spritesFolder .. "sonic_demo.exe/fly/fly", 2)
 sonic_demoexe.fall = loadFrames(spritesFolder .. "sonic_demo.exe/fall/", 2)
 sonic_demoexe.kill_tails = loadFrames(spritesFolder .. "sonic_demo.exe/kill/test/", 7)
+sonic_demoexe.fly_anim = loadFrames(spritesFolder .. "sonic_demo.exe/fly/anim/", 3)
 sonic_demoexe.cr4sh = fast.getImage(spritesFolder.."sonic_demo.exe/fly/anim/cr4sh.png")
 sonic_demoexe.anim_tails = loadFrames(spritesFolder.."sonic_demo.exe/anim/tails/", 8)
 sonic_demoexe = initCharacterSprite(sonic_demoexe, sonic_demoexe.idle)
@@ -715,12 +716,13 @@ function cheating(dt)
     if cheat_time >= 20 then
         cheating_vis2 = false
         cheating_vis = true
-        updateSprite(dt * 1.35, sonic_demoexe_screen.grab, sonic_demoexe_screen)
-        if sonic_demoexe_screen.spriteIndex >= #sonic_demoexe_screen.grab then
-            sonic_demoexe_screen.spriteIndex = #sonic_demoexe_screen.grab
-            if cheat_time >= 25 then
-                gamestate = "william"
-            end
+        local grab = sonic_demoexe_screen.grab
+        updateSprite(dt * 1.35, grab, sonic_demoexe_screen)
+        if sonic_demoexe_screen.spriteIndex > #grab then
+            sonic_demoexe_screen.spriteIndex = #grab
+        end
+        if cheat_time >= 25 then
+            gamestate = "william"
         end
     end
 end
@@ -887,23 +889,22 @@ function test_update(dt, char, map)
     char._jumpBuf = jump and JUMP_BUFFER or math.max(0, char._jumpBuf - dt)
 
     if char == sonic_demoexe and isDemoWithPhysics then
-        if char.grounded then
-            vx = vx * (1 - (char.groundFriction or GROUND_FRICTION))
-            if math.abs(vx) < 0.1 then vx = 0 end
+        if grounded then
+            vx = approach(vx, 0, (GROUND_FRICTION))
         else
             vx = vx * AIR_DRAG
-        end
-        if not char.grounded then
-            vy = vy + ((char.jumping and 625) or 400) * dt
+            vy = vy + (char.jumping and 1250) * dt
         end
     elseif char ~= sonic_demoexe then
             if grounded and (lookUp or lookDown) then
-                vx = 0
-                if lookUp then char.currentSprite = char.up or char.idle
-                elseif lookDown then char.currentSprite = char.down or char.idle
+                local groundY = getGroundY(char, map, char.x, char.y)
+                if groundY then
+                    char.y, vy, vx = groundY, 0, 0
                 end
-                char.angle = 0
-                char.fakeAngle = 0
+                char.currentSprite = lookUp and (char.up or char.idle) or (char.down or char.idle)
+                char.angle, char.fakeAngle = 0, 0
+                char.velocity.x, char.velocity.y = vx, vy
+                return
             elseif moveRight or moveLeft then
                 char.direction = moveRight and 1 or -1
                 local accel = char.acceleration
@@ -934,18 +935,12 @@ function test_update(dt, char, map)
                     vx = vx * AIR_DRAG
                 end
                 if math.abs(vx) == 0 and not char.jumping then
-                    char.currentSprite = char.idle
-                    char.angle = 0
-                    char.fakeAngle = 0
+                    char.angle, char.fakeAngle = 0, 0
                 end
             end
-            if jump and grounded then
+            if (jump and grounded) or (char._jumpBuf > 0 and char._coyote > 0 and not char.jumping) then
                 vy = char.jumpHeight
-                char.angle = 0
-                char.fakeAngle = 0
-                if char.jump then updateSprite(dt, char.jump, char) end
-                char.jumping = true
-                char.grounded = false
+                char.jumping, char.grounded, char._jumpBuf = true, false, 0
                 if sounds and sounds.jump_sound then sounds.jump_sound:play() end
             end
 
@@ -953,7 +948,6 @@ function test_update(dt, char, map)
                 vy = char.jumpHeight
                 char.jumping, char.grounded = true, false
                 char._jumpBuf = 0
-                if char.jump then updateSprite(dt, char.jump, char) end
                 if sounds and sounds.jump_sound then sounds.jump_sound:play() end
             end
 
@@ -1006,11 +1000,10 @@ function test_update(dt, char, map)
     if not checkCollision(char, map, nextX, char.y) then
         char.x = nextX
     else
-        local stepped = false
+        local stepped
         for step = 1, MAX_STEP_HEIGHT do
             if not checkCollision(char, map, nextX, char.y - step) then
-                char.x, char.y = nextX, char.y - step
-                stepped = true
+                char.x, char.y, stepped = nextX, char.y - step, true
                 break
             end
         end
@@ -1087,7 +1080,8 @@ local function handleBounce(knuck, demo, dt)
                 demo.jumping = false
                 demo.grounded = false
                 demo.bounceCount = 0
-                demo.currentSprite = demo.fall[1]
+                demo.currentSprite = demo.fall
+                demo.spriteIndex = 1
                 demo.fallTimer = 0
             else
                 knuck.velocity.y = -bounceStrength
@@ -1097,12 +1091,13 @@ local function handleBounce(knuck, demo, dt)
                 demo.jumping = true
                 demo.grounded = false
 
+                local horizontalPush = 50
                 if knuck.x < demo.x then
-                    knuck.velocity.x = knuck.velocity.x - 50
-                    demo.velocity.x = demo.velocity.x + 50
+                    knuck.velocity.x = knuck.velocity.x - horizontalPush
+                    demo.velocity.x = demo.velocity.x + horizontalPush
                 else
-                    knuck.velocity.x = knuck.velocity.x + 50
-                    demo.velocity.x = demo.velocity.x - 50
+                    knuck.velocity.x = knuck.velocity.x + horizontalPush
+                    demo.velocity.x = demo.velocity.x - horizontalPush
                 end
             end
         end
@@ -1120,119 +1115,114 @@ end
 
 function knuck_up(dt)
     updateSprite(dt * 0.5, s1.stage2, s1)
-
     if not demo_vis then
-        sonic_demoexe.currentSprite = sonic_demoexe.crouch
-        sonic_demoexe.x = 6453
-        sonic_demoexe.y = 772
-        sonic_demoexe.direction = -1
+        local demo = sonic_demoexe
+        demo.currentSprite = demo.crouch
+        demo.x, demo.y, demo.direction = 6453, 772, -1
     end
 
     if knuckles.x >= 2400 then stage1_vis = false end
     if knuckles.x >= 4250 then
-        stage2_vis = false
-        knuck_bg = knuck_bg2
-        demo_vis = true
+        stage2_vis, knuck_bg, demo_vis = false, knuck_bg2, true
     end
     if knuckles.x >= 5350 then
-        stage3_vis = false
-        knuck_bg = knuck_bg3
+        stage3_vis, knuck_bg = false, knuck_bg3
     end
-    if knuckles.x > 5990 then
-        waiting_knuck = waiting_knuck + dt
-        test_update(dt, sonic_demoexe, "map2")
-        local map2 = getMap("map2")
-        if not map2 then return end
-        local targetCamX = map2.width - base_width
-        local camSpeed = 950
+
+    if knuckles.x <= 5990 then return end
+
+    waiting_knuck = waiting_knuck + dt
+    test_update(dt, sonic_demoexe, "map2")
+
+    local map2 = getMap("map2")
+    if not map2 then return end
+
+    local targetCamX, camSpeed = map2.width - base_width, 950
+    if not camera.locked then
         if camera.x < targetCamX then
             camera.x = min(camera.x + camSpeed * dt, targetCamX)
+        end
+        if camera.x >= targetCamX then
+            camera.x = targetCamX
+            camera.locked = true
+        end
+    end
+    idk_fix = true
+
+    if waiting_knuck >= 2 and not bossfightActive and not blackScreen then
+        sounds.bossMusic:play()
+        bossfightActive = true
+        bossfightTimer = sounds.bossMusic:getDuration("seconds")
+    end
+
+    if bossfightActive and not blackScreen then
+        bossfightTimer = max(0, bossfightTimer - dt)
+        if bossfightTimer == 0 then
+            bossfightActive = false
+            sounds.bossMusic:stop()
+            blackScreen, blackTimer = true, 3
+        end
+    end
+
+    if blackScreen then
+        blackTimer = blackTimer - dt
+        if blackTimer <= 0 then
+            blackScreen = false
+            charStatus.knuckles_alive = false
+            charStatus.knuckles_lock = false
+            charStatus.eggman_lock = true
+            gamestate = "selection"
+        end
+        return
+    end
+
+    local demo = sonic_demoexe
+    if bossfightActive and demo then
+        demo.physics_enabled = false
+        if demo.x > 6484 then
+            demo.direction = -1
+        elseif demo.x < 5993 then
+            demo.direction = 1
+        elseif math.random() < 0.002 then
+            demo.direction = (knuckles.x > demo.x) and 1 or -1
+        end
+
+        if demo.direction ~= previousDirection then
+            demo_speed = math.random(375, 400)
+            previousDirection = demo.direction
+        end
+        demo_speed = demo_speed or 380
+        local targetSpeed = demo_speed * demo.direction
+
+        jumpTimer = jumpTimer + dt
+        if jumpTimer >= jumpInterval and not demo.jumping then
+            jumpTimer = 0
+            if math.random() <= 0.4 then
+                demo.velocity.y = demo.jumpHeight
+                demo.jumping, demo.grounded = true, false
+            end
+        end
+        handleBounce(knuckles, demo, dt)
+
+        if demo.velocity.x < targetSpeed then
+            demo.velocity.x = min(demo.velocity.x + demo_speed * dt, targetSpeed)
+        elseif demo.velocity.x > targetSpeed then
+            demo.velocity.x = max(demo.velocity.x - demo_speed * dt, targetSpeed)
+        end
+        if demo.currentSprite == demo.fall then
+            updateSprite(dt, demo.fall, demo)
+        elseif demo.jumping then
+            updateSprite(dt, demo.jump, demo)
+        elseif abs(demo.velocity.x) < abs(targetSpeed) * 0.9 then
+            updateSprite(dt, demo.walk, demo)
         else
-            camera.x = max(camera.x - camSpeed * dt, targetCamX)
+            updateSprite(dt, demo.run, demo)
         end
 
-        idk_fix = true
-        if waiting_knuck >= 2 and not bossfightActive and not blackScreen then
-            sounds.bossMusic:play()
-            bossfightActive = true
-            bossfightTimer = sounds.bossMusic:getDuration("seconds")
-        end
-
-        if bossfightActive and not blackScreen then
-            bossfightTimer = bossfightTimer - dt
-            if bossfightTimer <= 0 then
-                bossfightTimer = 0
-                bossfightActive = false
-                sounds.bossMusic:stop()
-                blackScreen = true
-                blackTimer = 3
-            end
-        end
-
-        if blackScreen then
-            blackTimer = blackTimer - dt
-            if blackTimer <= 0 then
-                blackScreen = false
-                charStatus.knuckles_alive = false
-                charStatus.knuckles_lock = false
-                charStatus.eggman_lock = true
-                gamestate = "selection"
-            end
-            return
-        end
-
-        if bossfightActive and sonic_demoexe then
-            test_update(dt, sonic_demoexe, "map2")
-            sonic_demoexe.physics_enabled = false
-            if sonic_demoexe.x > 6484 then
-                sonic_demoexe.direction = -1
-            elseif sonic_demoexe.x < 5993 then
-                sonic_demoexe.direction = 1
-            end
-            if math.random() < 0.002 then
-                sonic_demoexe.direction = (knuckles.x > sonic_demoexe.x) and 1 or -1
-            end
-            if sonic_demoexe.direction ~= previousDirection then
-                demo_speed = math.random(375, 400)
-                previousDirection = sonic_demoexe.direction
-            end
-            demo_speed = demo_speed or 380
-
-            local accel = 800
-            local targetSpeed = demo_speed * sonic_demoexe.direction
-            jumpTimer = jumpTimer + dt
-            if jumpTimer >= jumpInterval and not sonic_demoexe.jumping then
-                jumpTimer = 0
-                if math.random() <= 0.4 then
-                    sonic_demoexe.velocity.y = sonic_demoexe.jumpHeight
-                    sonic_demoexe.jumping = true
-                    sonic_demoexe.grounded = false
-                end
-            end
-
-            handleBounce(knuckles, sonic_demoexe, dt)
-            if sonic_demoexe.velocity.x < targetSpeed then
-                sonic_demoexe.velocity.x = min(sonic_demoexe.velocity.x + accel * dt, targetSpeed)
-            elseif sonic_demoexe.velocity.x > targetSpeed then
-                sonic_demoexe.velocity.x = max(sonic_demoexe.velocity.x - accel * dt, targetSpeed)
-            end
-            if sonic_demoexe.currentSprite == sonic_demoexe.fall then
-                updateSprite(dt, sonic_demoexe.fall, sonic_demoexe)
-            elseif sonic_demoexe.jumping then
-                updateSprite(dt, sonic_demoexe.jump, sonic_demoexe)
-            elseif abs(sonic_demoexe.velocity.x) < abs(targetSpeed) * 0.9 then
-                updateSprite(dt, sonic_demoexe.walk, sonic_demoexe)
-            else
-                updateSprite(dt, sonic_demoexe.run, sonic_demoexe)
-            end
-
-            if sonic_demoexe.grounded then
-                sonic_demoexe.jumping = false
-            end
-            if sonic_demoexe.x < 5991 then
-                sonic_demoexe.x = 5991
-                sonic_demoexe.velocity.x = max(0, sonic_demoexe.velocity.x)
-            end
+        if demo.grounded then demo.jumping = false end
+        if demo.x < 5991 then
+            demo.x = 5991
+            demo.velocity.x = max(0, demo.velocity.x)
         end
     end
 end
@@ -1583,10 +1573,8 @@ function drawStageAct(img, x, y)
     love.graphics.draw(img, x, y)
 end
 local greenHillZoneTitle = fast.getImage("images/zone/titles/zone.png")
-greenHillZoneTitle_2 = fast.getImage("images/zone/titles/g_hill.png")
 local hideAndSeekZoneTitle = fast.getImage("images/zone/titles/h&s.png")
 local DotTitle = fast.getImage("images/zone/titles/dot.png")
-labTitle = fast.getImage("images/zone/titles/us.png")
 function drawTitleCard(stageNameImg, circleImg, actImg, baseX, baseY)
     drawStageCircle(circleImg, baseX + 10, baseY)
     drawStageName(stageNameImg, -baseX + 225, baseY)
@@ -1713,7 +1701,7 @@ local function eggmanCrashThing(dt)
 
     if crashing2 and crashTimer < 12 then
         sounds.cr4sh_sound:play()
-        gh1 = fast.getImage("images/maps/gh1_crashed.png")
+        mapImages.gh1 = fast.getImage("images/maps/gh1_crashed.png")
         eggman.currentSprite = eggman.crashed
         sonic_demoexe.currentSprite = sonic_demoexe.cr4sh
     elseif crashTimer >= 12 then
@@ -1798,6 +1786,7 @@ function love.update(dt)
     if gamestate == "selection" then
         tails_caught = false
         tails_caught2 = false
+        camera.locked = false
         sonic_demoexe.physics_enabled = false
         if (love.keyboard.isDown("return") or jumpButton.active) then
             if not returnPressed then
@@ -2576,8 +2565,8 @@ function love.draw()
         love.graphics.setColor(1,1,1,cheating_alpha2)
         local t = love.timer.getTime()
         if cheating_vis2 then
-            love.graphics.print("How dare you cheat ...",40,50+math.sin(t*2.5)*3)
-            love.graphics.print("I won't let you escape ...",75,157+math.sin(t*2)*2)
+            love.graphics.print("How dare you cheat within my realm, my game.",40,50+math.sin(t*2.5)*3)
+            love.graphics.print("I won't let you escape from your fate that easily.",75,157+math.sin(t*2)*2)
         end
     elseif gamestate == "testmap" then
         love.graphics.push()
