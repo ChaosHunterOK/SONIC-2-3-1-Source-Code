@@ -71,7 +71,7 @@ local startTime = os.time()
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "knuck"
+local gamestate = "credits"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -150,7 +150,7 @@ local soundDefs = {
     flames = "sounds/flames.ogg",
     buildUPSound = "sounds/buildUP.ogg",
     denySound = "sounds/deny.ogg",
-    hitStaticSound = "sounds/hitStatic.ogg",
+    egg = "music/egg.mp3",
     enterSound = "sounds/enter.ogg",
     cr4sh_sound = "sounds/cr4sh_sound.mp3",
     sound_fix = "sounds/sound_fix.mp3",
@@ -343,8 +343,6 @@ local function createBaseplate(width, depth)
 end
 
 local credits_text = {}
-local credits_y = 0
-local line_height = 20
 local message_alpha = 0
 
 local SCALE = 2
@@ -428,6 +426,10 @@ local fire_bg = initCharacterSprite(fire_bg, fire_bg.idle)
 local tail_tails = initArraySprite(tail_tails, tail_tails.idle)
 local s1 = initArraySprite(s1, s1.stage2)
 
+local credits = {}
+scrollY = 0
+scrollSpeed = 200
+
 function love.load()
     love.window.setMode(base_width * SCALE, base_height * SCALE, {
         fullscreen = false,
@@ -460,6 +462,25 @@ function love.load()
     else
         print("no discord RPC")
     end
+    credits = {
+        {name = "CopiluCuSarmale", role = "Director, Game Dev, Artist, Animator, Coder, Document, Composer", img = "copilucusarmale.png"},
+        {name = "Replayer", role = "Game Tester, Document, Sonic_DEMO.exe's laugh", img = "replayer.png"},
+        {name = "Leon", role = "Document", img = "leon.png"},
+        {name = "Saunter", role = "Coder, Composer", img = "saunter.png"},
+        {name = "Trigavid", role = "Composer", img = "trigavid.png"},
+        {name = "SEGA", role = "Sonic, Tails, Knuckles, Eggman and mostly the rest", img = "sega.png"},
+        {name = "RealDev", role = "the Sonic 1 Title Screen Font (Expanded)", img = "RealDev.png"}
+    }
+
+    for i, c in ipairs(credits) do
+        local path = "images/credits/" .. c.img
+        if love.filesystem.getInfo(path) then
+            c.image = fast.getImage(path)
+        else
+            c.image = fast.getImage("images/credits/unknown.png")
+        end
+    end
+
     images.score = fast.getImage("images/stats/score.png")
     images.time = fast.getImage("images/stats/time.png")
     images.rings = fast.getImage("images/stats/rings.png")
@@ -1675,6 +1696,7 @@ local function eggmanCrashThing(dt)
     end
 
     if not crashing2 then
+        sounds.egg:stop()
         sonic_demoexe.currentSprite = sonic_demoexe.fly[1]
         eggman.currentSprite = eggman.idle
         ringAnimState = false
@@ -1750,12 +1772,6 @@ local gamestateHandlers = {
             startTransition("error")
         end
     end,
-    doc = function()
-        if love.keyboard.isDown("return") or jumpButton.active then
-            openURL(link)
-            love.event.quit()
-        end
-    end
 }
 
 function love.update(dt)
@@ -1826,12 +1842,19 @@ function love.update(dt)
     end
 
     if gamestate == "credits" then
-        credits_y = credits_y - scroll_speed * dt
-        if credits_y < -#credits_text * line_height then
-            gamestate = "doc"
+        if love.keyboard.isDown("down") or joystick.dy > 0.2 then
+            scrollY = scrollY + scrollSpeed * dt
+        elseif love.keyboard.isDown("up") or joystick.dy < -0.2 then
+            scrollY = scrollY - scrollSpeed * dt
         end
-    elseif gamestate == "doc" then
-        message_alpha = min(1, message_alpha + dt * 0.5)
+
+        local maxScroll = max(#credits * 120 - base_height + 50, 0)
+        scrollY = max(0, min(scrollY, maxScroll))
+
+        if love.keyboard.isDown("return") or jumpButton.active then
+            openURL(link)
+            love.event.quit()
+        end
     elseif gamestate == "error" then
         elapsedTime4 = (elapsedTime4 or 0) + dt
         reboot_vis2 = elapsedTime4 >= 2 and elapsedTime4 < 6
@@ -2501,6 +2524,7 @@ function love.draw()
         end
         love.graphics.setColor(1, 1, 1)
     elseif gamestate == "eggman" then
+        sounds.egg:play()
         if not crashing2 then drawScrollingBG(menu,bgX1,bgX2,0,0) end
         love.graphics.push()
         love.graphics.translate(-camX,-camY)
@@ -2553,12 +2577,19 @@ function love.draw()
             love.graphics.print("An Error has Occurred.",20,20)
         end
     elseif gamestate == "credits" then
-        for i,line in ipairs(credits_text) do
-            love.graphics.printf(line,10,credits_y+(i-1)*line_height, base_width-20,"center")
+        local xLeft = 50
+        local xRight = 250
+        local y = 50 - scrollY
+
+        for i, c in ipairs(credits) do
+            love.graphics.setColor(1, 1, 1)
+            love.graphics.rectangle("line", xLeft, y, 150, 100, 0)
+            love.graphics.draw(c.image, xLeft + 75 - c.image:getWidth()/2, y + 50 - c.image:getHeight()/2)
+            love.graphics.rectangle("line", xRight, y, base_width - xRight - 50, 100)
+            love.graphics.printf(c.name .. "\n" .. c.role, xRight + 10, y + 10, base_width - xRight - 70, "left")
+            y = y + 120
         end
-    elseif gamestate == "doc" then
-        love.graphics.setColor(1,1,1,message_alpha)
-        love.graphics.printf("Press Enter to open the Document",0,base_height/2,base_width,"center")
+        fast.drawTextOutline("Press Enter to open the Document",base_width / 2 - 150,base_height - 40,{1,1,1,1},{0,0,0,1},2)
     elseif gamestate == "warning" then
         love.graphics.printf("WARNING!\nThis game contains flash light ...",0,base_height/2-45,base_width,"center")
     elseif gamestate == "cheating" then

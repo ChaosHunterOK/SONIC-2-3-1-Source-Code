@@ -135,4 +135,22 @@ function fast.limitFPS()
     end
 end
 
+function fast.drawTextOutline(text, x, y, color, outlineColor, outlineSize)
+    outlineSize = outlineSize or 1
+    outlineColor = outlineColor or {0,0,0,1}
+    color = color or {1,1,1,1}
+
+    for dx = -outlineSize, outlineSize do
+        for dy = -outlineSize, outlineSize do
+            if dx ~= 0 or dy ~= 0 then
+                love.graphics.setColor(outlineColor)
+                love.graphics.print(text, x + dx, y + dy)
+            end
+        end
+    end
+
+    love.graphics.setColor(color)
+    love.graphics.print(text, x, y)
+end
+
 return fast
