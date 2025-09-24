@@ -380,7 +380,7 @@ tails.run = loadFrames(spritesFolder .. "tails/run/", 2)
 tails.damage = loadFrames(spritesFolder .. "tails/damage/", 2)
 tails = initCharacterSprite(tails, tails.idle)
 
-local knuckles = createCharacter{ x = 100, y = 50, maxSpeed = 10000 }
+local knuckles = createCharacter{ x = 100, y = 50, maxSpeed = 200 }
 knuckles.idle = fast.getImage(spritesFolder .. "knuckles/idle.png")
 knuckles.walk = loadFrames(spritesFolder .. "knuckles/walking/", 7)
 knuckles.run = loadFrames(spritesFolder .. "knuckles/run/", 4)
@@ -438,7 +438,6 @@ function love.load()
     love.window.setTitle("SONIC 2 3 1")
     love.window.setIcon(love.image.newImageData("images/game_icon.png"))
     canvas = love.graphics.newCanvas(base_width, base_height)
-    --if canvas then canvas:release() end
     updateCanvasScale()
 
     if ok and discord then
@@ -1034,7 +1033,7 @@ function test_update(dt, char, map)
     updateGamestate(dt, char)
 end
 
-local hs_timer = 1
+local hs_timer = 7
 local hs_totalTime = 0
 local tails_hiding = false
 local bushes_destroyed = false
@@ -2327,6 +2326,12 @@ function mobile_stuff_draw()
         SCALE, SCALE
     )
 
+    if jumpButton.active then
+        love.graphics.setColor(1, 1, 1, 0.75)
+    else
+        love.graphics.setColor(1, 1, 1, 1)
+    end
+
     love.graphics.draw(
         jumpButtonImage,
         jumpButton.x - jumpButtonImage:getWidth() / 2 * SCALE,
@@ -2352,28 +2357,28 @@ function love.draw()
         if not showStageTitle then return end
 
         local remaining = stageTitleDuration - stageTitleTimer
-        local alpha = 1
-        if remaining < stageTitleFadeTime then
-            alpha = remaining / stageTitleFadeTime
-        end
+        if remaining <= 0 then return end
+        local alpha = (remaining < stageTitleFadeTime)
+            and (remaining / stageTitleFadeTime)
+            or 1
 
-        alpha = clamp(alpha, 0, 1)
         if alpha <= 0 then return end
-
         love.graphics.setColor(0, 0, 0, alpha)
         love.graphics.rectangle("fill", 0, 0, base_width, base_height)
         love.graphics.setColor(1, 1, 1, 1)
 
-        local enterProgress = min(stageTitleTimer / stageTitleFadeTime, 1)
-        local startX = -100
+        local y = base_height / 2 - 40
         local endX = (base_width - titleImg:getWidth()) / 2 - 60
-        local slideX = lerp(startX, endX, linearTime(enterProgress))
+        local slideX
 
         if remaining < stageTitleFadeTime then
             local exitProgress = 1 - (remaining / stageTitleFadeTime)
             slideX = lerp(endX, base_width + 130, linearTime(exitProgress))
+        else
+            local enterProgress = min(stageTitleTimer / stageTitleFadeTime, 1)
+            slideX = lerp(-100, endX, linearTime(enterProgress))
         end
-        local y = base_height / 2 - 40
+
         drawTitleCard(titleImg, circlesImg, actImg, slideX, y)
     end
 
