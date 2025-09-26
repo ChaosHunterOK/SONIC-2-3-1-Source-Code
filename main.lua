@@ -71,7 +71,7 @@ local startTime = os.time()
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "credits"
+local gamestate = "william"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -113,9 +113,10 @@ local charStatus = {
 }
 
 local idk_img = fast.getImage("images/idk.png")
-local chase_img = fast.getImage("images/chase.png")
 local bush_img = fast.getImage("images/bush.png")
 local egg_mob = fast.getImage("images/egg_mob.png")
+
+jumpscare = fast.getImage("images/jump.png")
 
 knuck_bg = fast.getImage("images/background/knuck.png")
 knuck_bg2 = fast.getImage("images/background/knuck2.png")
@@ -343,8 +344,6 @@ local function createBaseplate(width, depth)
 end
 
 local credits_text = {}
-local message_alpha = 0
-
 local SCALE = 2
 
 local touches = {}
@@ -425,6 +424,18 @@ sonic_demoexe_screen = initCharacterSprite(sonic_demoexe_screen, sonic_demoexe_s
 local fire_bg = initCharacterSprite(fire_bg, fire_bg.idle)
 local tail_tails = initArraySprite(tail_tails, tail_tails.idle)
 local s1 = initArraySprite(s1, s1.stage2)
+
+local demo_3d = {
+    chase_img = fast.getImage(spritesFolder.."demo/chase.png"),
+    silly_img = fast.getImage(spritesFolder.."demo/silly.png"),
+    side_imgs = loadFrames(spritesFolder.."demo/side/", 8),
+    state = "chasing",
+    stop_timer = 0,
+    current_side = 1,
+    has_stopped_once = false
+}
+
+local stopDistance = 10
 
 local credits = {}
 scrollY = 0
@@ -531,6 +542,16 @@ local targetRoll = 0
 local rollStrength = 0.02
 local rollReturnSpeed = 5
 
+function getRelativeAngle(player, chaser)
+    local dx, dz = player.x - chaser.x, player.z - chaser.z
+    local angleToPlayer = atan2(dz, dx)
+    local diff = angleToPlayer - player.yaw
+    while diff < -math.pi do diff = diff + 2*math.pi end
+    while diff >  math.pi do diff = diff - 2*math.pi end
+    return deg(diff)
+end
+
+hasPlayedFlashSound = false
 function william_update(dt)
     local smoothSpeed = 8
     camera_3d.yaw = camera_3d.yaw + (targetYaw - camera_3d.yaw) * min(dt * smoothSpeed, 1)
@@ -570,25 +591,58 @@ function william_update(dt)
 
     local dx, dy, dz = camera_3d.x - chaser.x, camera_3d.y - chaser.y, camera_3d.z - chaser.z
     local distSq = dx*dx + dy*dy + dz*dz
-    if distSq > 0.01 then
-        local dist = math.sqrt(distSq)
-        local speedFactor = 1 + max(0, (20 - dist) / 20) * 2
-        local lerpAmt = dt * 4
-        local targetVx = dx / dist * chaser.speed * speedFactor
-        local targetVy = dy / dist * chaser.speed * speedFactor
-        local targetVz = dz / dist * chaser.speed * speedFactor
-        chaser.vx = (chaser.vx or 0) + (targetVx - (chaser.vx or 0)) * lerpAmt
-        chaser.vy = (chaser.vy or 0) + (targetVy - (chaser.vy or 0)) * lerpAmt
-        chaser.vz = (chaser.vz or 0) + (targetVz - (chaser.vz or 0)) * lerpAmt
+    local dist = math.sqrt(distSq)
 
-        chaser.x = chaser.x + chaser.vx * dt
-        chaser.y = chaser.y + chaser.vy * dt
-        chaser.z = chaser.z + chaser.vz * dt
+    if demo_3d.state == "chasing" then
+        if dist < stopDistance and not demo_3d.has_stopped_once then
+            demo_3d.state = "stopped"
+            demo_3d.stop_timer = 0
+            demo_3d.current_side = 1
+            demo_3d.has_stopped_once = true
+        else
+            local speedFactor = 1 + math.max(0, (20 - dist) / 20) * 2
+            local lerpAmt = dt * 4
+            local targetVx = dx / dist * chaser.speed * speedFactor
+            local targetVy = dy / dist * chaser.speed * speedFactor
+            local targetVz = dz / dist * chaser.speed * speedFactor
+            chaser.vx = (chaser.vx or 0) + (targetVx - (chaser.vx or 0)) * lerpAmt
+            chaser.vy = (chaser.vy or 0) + (targetVy - (chaser.vy or 0)) * lerpAmt
+            chaser.vz = (chaser.vz or 0) + (targetVz - (chaser.vz or 0)) * lerpAmt
+
+            chaser.x = chaser.x + chaser.vx * dt
+            chaser.y = chaser.y + chaser.vy * dt
+            chaser.z = chaser.z + chaser.vz * dt
+        end
+
+    elseif demo_3d.state == "stopped" then
+        demo_3d.stop_timer = demo_3d.stop_timer + dt
+
+        if not hasPlayedFlashSound then
+            sounds.sound_fix:play()
+            hasPlayedFlashSound = true
+        end
+
+        if math.abs(velX) > 0.01 or math.abs(velZ) > 0.01 then
+            local angle = getRelativeAngleFromMovement(camera_3d, chaser)
+            local index = math.floor(((angle + 180) / 45) + 0.5) % 8 + 1
+            demo_3d.current_side = index
+        end
+        if demo_3d.stop_timer >= 12 then
+            demo_3d.state = "chasing"
+        end
     end
+
     if distSq < 1 then
         gamestate = "game_over"
     end
+
     preloadTiles()
+end
+
+function getRelativeAngleFromMovement(player, chaser)
+    local dx, dz = player.x - chaser.x, player.z - chaser.z
+    local angleToPlayer = atan2(dz, dx)
+    return deg(angleToPlayer)
 end
 
 local function inRenderDistance(tile)
@@ -1774,6 +1828,17 @@ local gamestateHandlers = {
     end,
 }
 
+function checkStageTitle(gamestate, stages)
+    if gamestate ~= lastGamestate then
+        titleCardPlayed = false
+        lastGamestate = gamestate
+    end
+    if stages[gamestate] and not titleCardPlayed then
+        triggerStageTitle()
+        titleCardPlayed = true
+    end
+end
+
 function love.update(dt)
     if resizeFreezeTimer > 0 then
         resizeFreezeTimer = resizeFreezeTimer - dt
@@ -1929,15 +1994,7 @@ function love.update(dt)
         end
     end
 
-    if gamestate ~= lastGamestate then
-        titleCardPlayed = false
-        lastGamestate = gamestate
-    end
-    if stages[gamestate] and not titleCardPlayed then
-        triggerStageTitle()
-        titleCardPlayed = true
-    end
-
+    checkStageTitle(gamestate, stages)
     menuscreen_update(dt)
     updateStageTitle(dt)
     updateScrollingBG(dt)
@@ -2065,14 +2122,13 @@ local function char_draw(char, offsetX, offsetY)
 end
 
 local function drawScrollingBG(image, x1, x2, offsetX, offsetY)
-    local screenW, screenH = base_width, base_height
+    local screenW = base_width
     if x1 + offsetX + image:getWidth() > 0 and x1 + offsetX < screenW then love.graphics.draw(image, x1 + offsetX, offsetY) end
     if x2 + offsetX + image:getWidth() > 0 and x2 + offsetX < screenW then love.graphics.draw(image, x2 + offsetX, offsetY) end
 end
 
 DEMO_MenuScreen = fast.getImage(spritesFolder.."menuscreen/splash/6.png")
 greenHillZoneCircles = fast.getImage("images/zone/circles/g_hill.png")
-greenHillZoneCircles_2 = fast.getImage("images/zone/circles/g_hill_2.png")
 local hideAndSeekZoneCircles = fast.getImage("images/zone/circles/h&s.png")
 local DotCircles = fast.getImage("images/zone/circles/dot.png")
 labCircles = fast.getImage("images/zone/circles/us.png")
@@ -2164,11 +2220,47 @@ function preloadTiles()
     for i = n + 1, #preloadedTiles do preloadedTiles[i] = nil end
 end
 
-local function draw_william()
+function draw_demo3d()
     updateProjectionConstants()
     local cy, sy = math.cos(-camera_3d.yaw), math.sin(-camera_3d.yaw)
     local cp, sp = math.cos(-camera_3d.pitch), math.sin(-camera_3d.pitch)
 
+    local x, y, z = chaser.x - camera_3d.x, chaser.y - camera_3d.y, chaser.z - camera_3d.z
+    local x1, z1 = x * cy - z * sy, x * sy + z * cy
+    local y1 = y * cp - z1 * sp
+    local z2 = y * sp + z1 * cp
+    local dx, dy, dz = camera_3d.x - chaser.x, camera_3d.y - chaser.y, camera_3d.z - chaser.z
+
+    if z2 > 0.1 then
+        local invZ = 1 / z2
+        local scale = 25 * invZ
+        local sx = x1 / (z2 * fovHalfTan * aspect)
+        local sy = y1 / (z2 * fovHalfTan)
+
+        local distSq = dx*dx + dy*dy + dz*dz
+        local fadeStart2, fadeEnd2 = 100*100, 15*15
+        local alpha = clamp((fadeStart2 - distSq) / (fadeStart2 - fadeEnd2), 0, 1)
+
+        love.graphics.setColor(1, 1, 1, alpha)
+
+        local img
+        if demo_3d.state == "chasing" then
+            img = demo_3d.chase_img
+        else
+            img = demo_3d.side_imgs[demo_3d.current_side]
+        end
+
+        love.graphics.draw(
+            img,
+            sx * hw + hw - img:getWidth() * scale / 2,
+            -sy * hh + hh - img:getHeight() * scale / 2,
+            0, scale, scale
+        )
+    end
+end
+
+local function draw_william()
+    updateProjectionConstants()
     if not sounds.buildUPSound:isPlaying() then
         sounds.buildUPSound:play()
     end
@@ -2187,35 +2279,25 @@ local function draw_william()
         end
     end
 
-    do
-        local x, y, z = chaser.x - camera_3d.x, chaser.y - camera_3d.y, chaser.z - camera_3d.z
-        local x1, z1 = x * cy - z * sy, x * sy + z * cy
-        local y1 = y * cp - z1 * sp
-        local z2 = y * sp + z1 * cp
-
-        if z2 > 0.1 then
-            local invZ = 1 / z2
-            local scale = 25 * invZ
-            local sx = x1 / (z2 * fovHalfTan * aspect)
-            local sy = y1 / (z2 * fovHalfTan)
-
-            local distSq = dist2(camera_3d, chaser)
-            local fadeStart2, fadeEnd2 = 100*100, 15*15
-            local alpha = clamp((fadeStart2 - distSq) / (fadeStart2 - fadeEnd2), 0, 1)
-
-            love.graphics.setColor(1, 1, 1, alpha)
-            love.graphics.draw(
-                chase_img,
-                sx * hw + hw - chase_img:getWidth() * scale / 2,
-                -sy * hh + hh - chase_img:getHeight() * scale / 2,
-                0, scale, scale
-            )
-        end
-    end
+    draw_demo3d()
     love.graphics.setColor(1, 1, 1, 1)
+    draw_flashlight()
     love.graphics.draw(idk_img, 0, 0, 0, base_width / idk_img:getWidth(), base_height / idk_img:getHeight())
 
     drawStats()
+end
+function draw_flashlight()
+    if demo_3d.state == "stopped" then
+        local alpha = 1
+        if demo_3d.stop_timer > 1 then
+            alpha = 1 - (demo_3d.stop_timer - 1) / 1
+        end
+        alpha = clamp(alpha, 0, 1)
+
+        love.graphics.setColor(1, 1, 1, alpha)
+        love.graphics.draw(jumpscare, 0, 0, 0, base_width / jumpscare:getWidth(), base_height / jumpscare:getHeight())
+        love.graphics.setColor(1, 1, 1, 1)
+    end
 end
 
 function draw_menuscreen()
@@ -2235,11 +2317,7 @@ function draw_menuscreen()
 
         local demoX = (base_width - DEMO_MenuScreen:getWidth()) / 2 + offsetX * 0.5
         local demoY = (base_height - DEMO_MenuScreen:getHeight()) / 2 + offsetY * 0.4
-        if not splash_done then
-            love.graphics.draw(splash_frames.splash[frame_index3], demoX, demoY- 10)
-        else
-            love.graphics.draw(splash_frames.idle[frames_idk_d], demoX, demoY- 10)
-        end
+        love.graphics.draw(splash_frames.idle[frames_idk_d], demoX, demoY- 10)
 
         local t = min(pressTextTimer / pressTextAnimTime, 1)
         local easedT = easeInOutCubic(t)
@@ -2299,7 +2377,7 @@ function draw_menuscreen()
 end
 
 function linearTime(t)
-    return max(0, min(1, t))
+    return clamp(t, 0, 1)
 end
 
 function tails_tail_thing()
@@ -2362,6 +2440,7 @@ function mobile_stuff_draw()
         0,
         SCALE, SCALE
     )
+    love.graphics.setColor(1, 1, 1, 1)
 end
 
 local transitionCanvas = love.graphics.newCanvas(base_width, base_height)
@@ -2380,28 +2459,29 @@ function love.draw()
         if not showStageTitle then return end
 
         local remaining = stageTitleDuration - stageTitleTimer
-        if remaining <= 0 then return end
-        local alpha = (remaining < stageTitleFadeTime)
-            and (remaining / stageTitleFadeTime)
-            or 1
+        local alpha = 1
+        if remaining < stageTitleFadeTime then
+            alpha = remaining / stageTitleFadeTime
+        end
 
+        alpha = clamp(alpha, 0, 1)
         if alpha <= 0 then return end
+
         love.graphics.setColor(0, 0, 0, alpha)
         love.graphics.rectangle("fill", 0, 0, base_width, base_height)
         love.graphics.setColor(1, 1, 1, 1)
 
-        local y = base_height / 2 - 40
+        local enterProgress = clamp(stageTitleTimer / stageTitleFadeTime, 0, 1)
+        local startX = -100
         local endX = (base_width - titleImg:getWidth()) / 2 - 60
-        local slideX
+        local slideX = lerp(startX, endX, linearTime(enterProgress))
 
         if remaining < stageTitleFadeTime then
             local exitProgress = 1 - (remaining / stageTitleFadeTime)
             slideX = lerp(endX, base_width + 130, linearTime(exitProgress))
-        else
-            local enterProgress = min(stageTitleTimer / stageTitleFadeTime, 1)
-            slideX = lerp(-100, endX, linearTime(enterProgress))
         end
 
+        local y = base_height / 2 - 40
         drawTitleCard(titleImg, circlesImg, actImg, slideX, y)
     end
 
@@ -2433,7 +2513,6 @@ function love.draw()
 
         drawStats()
         drawStageTitle(greenHillZoneTitle, greenHillZoneCircles, stageActImg1)
-
     elseif gamestate == "hs" then
         love.graphics.push()
         if bushes_destroyed then love.graphics.draw(fire_bg.currentSprite,0,0) end
