@@ -71,7 +71,7 @@ local startTime = os.time()
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "warning"
+local gamestate = "testmap"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -2773,7 +2773,17 @@ function love.keyreleased(key)
     end
 end
 
+function safeRelease(resource)
+    if resource and resource.release then
+        resource:release()
+    end
+end
+
 function love.resize(w, h)
+    if canvas then
+        safeRelease(canvas)
+    end
+    canvas = love.graphics.newCanvas(base_width, base_height)
     updateCanvasScale()
     resizeFreezeTimer = 0.5
 end
@@ -2793,6 +2803,11 @@ function updateCanvasScale()
 
     offset_x = math.max(0, offset_x)
     offset_y = math.max(0, offset_y)
+
+    if transitionCanvas then
+        safeRelease(transitionCanvas)
+    end
+    transitionCanvas = love.graphics.newCanvas(base_width, base_height)
 end
 
 local cameraTouchID = nil
