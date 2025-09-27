@@ -71,7 +71,7 @@ local startTime = os.time()
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "hs"
+local gamestate = "warning"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -299,12 +299,7 @@ stage2_vis = true
 stage3 = fast.getImage(spritesFolder.."sonic_demo.exe/anim/knuckles/stage3.png")
 stage3_vis = true
 
-local tail_tails = {
-    x = 100,
-    y = 50,
-    width = 32,
-    height = 32
-}
+local tail_tails = {}
 tail_tails.idle = loadFrames(spritesFolder .. "tail/", 5)
 
 menuShrink = 1
@@ -489,6 +484,7 @@ function love.load()
         {name = "Leon", role = "Document", img = "leon.png"},
         {name = "Saunter", role = "Coder, Composer", img = "saunter.png"},
         {name = "Trigavid", role = "Composer", img = "trigavid.png"},
+        {name = "Irealism01", role = "Game tester (for mobile)", img = "irealism01.png"},
         {name = "SEGA", role = "Sonic, Tails, Knuckles, Eggman and mostly the rest", img = "sega.png"},
         {name = "RealDev", role = "the Sonic 1 Title Screen Font (Expanded)", img = "RealDev.png"}
     }
@@ -1462,10 +1458,8 @@ end
 local animation_phase = "initial"
 local animation_timer = 0
 local frame_index = 1
-local frame_index3 = 1
 local max_repeats = 12
 local repeat_count = 0
-local max_final_repeats = 4
 local animation_timer2 = 0
 local animation_timer3 = 0
 finished_transformation = false
@@ -1775,9 +1769,7 @@ local gamestateHandlers = {
         love.window.setTitle("SONIC 2 3 1")
     end,
     hs = function(dt)
-        --if not tails_caught then
         test_update(dt, tails, "map1")
-        --end
         hide_and_seek(dt)
         if show_black_screen then
             sounds.flames:stop()
