@@ -71,7 +71,7 @@ local startTime = os.time()
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "william"
+local gamestate = "hs"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -158,7 +158,7 @@ local soundDefs = {
     reboot_old = "sounds/reboot_old.ogg",
     bossMusic = "music/Demo_fight.mp3",
     tails_stage = "music/tails_stage.ogg",
-    demo_song = "music/demo_song.ogg",
+    placeholder = "music/placeholder.mp3",
     glitch_sound = "sounds/glitch_sound.mp3",
     jump_sound = "sounds/jump_sound.mp3",
     laugh_sound = "sounds/laugh.mp3",
@@ -190,10 +190,12 @@ local mapFiles = {
 
 local maps = {}
 function getMap(name)
-    if not maps[name] then
-        maps[name] = loadMap(mapFiles[name])
+    local map = maps[name]
+    if not map then
+        map = loadMap(mapFiles[name])
+        maps[name] = map
     end
-    return maps[name]
+    return map
 end
 
 function loadMap(path)
@@ -201,13 +203,23 @@ function loadMap(path)
     local imageData = love.image.newImageData(path)
     local w, h = imageData:getDimensions()
     local collision = {}
-    collision.width, collision.height = w, h
-    imageData:mapPixel(function(x, y, r, g, b, a)
-        collision[y * w + x + 1] = a > 0.1
-        return r, g, b, a
-    end)
+    local i = 1
+    for y = 0, h - 1 do
+        for x = 0, w - 1 do
+            local _, _, _, a = imageData:getPixel(x, y)
+            collision[i] = (a > 0.1)
+            i = i + 1
+        end
+    end
+
     imageData:release()
-    return {image = img, collision = collision, width = w, height = h}
+
+    return {
+        image = img,
+        collision = collision,
+        width = w,
+        height = h
+    }
 end
 
 local function createCharacter(opts)
@@ -234,8 +246,6 @@ local function createCharacter(opts)
         runThreshold = opts.runThreshold or 175,
         spriteIndex = 1,
         currentSprite = nil,
-        targetX = 0,
-        targetY = 0,
         fakeAngle = 0,
         _coyote = 0,
         _jumpBuf = 0,
@@ -500,7 +510,7 @@ function love.load()
 
     quads.numbers = {}
     local w, h = images.numbers:getDimensions()
-    for i = 0, 9 do
+    for i = 0, 10 do
         quads.numbers[i] = love.graphics.newQuad(i * 7, 0, 7, 11, w, h)
     end
 
@@ -530,11 +540,6 @@ end
 
 function clamp(val, minVal, maxVal) return max(minVal, min(maxVal, val)) end
 function lerp(a, b, t) return a + (b - a) * t end
-
-local function dist2(a, b)
-    local dx, dy, dz = a.x-b.x, a.y-b.y, a.z-b.z
-    return dx*dx + dy*dy + dz*dz
-end
 
 local velX, velZ = 0, 0
 local bobAmount = 0
@@ -966,7 +971,7 @@ function test_update(dt, char, map)
             vx = approach(vx, 0, (GROUND_FRICTION))
         else
             vx = vx * AIR_DRAG
-            vy = vy + (char.jumping and 1250) * dt
+            vy = vy + (char.jumping and 1250 or 0) * dt
         end
     elseif char ~= sonic_demoexe then
             if grounded and (lookUp or lookDown) then
@@ -1362,6 +1367,7 @@ function hide_and_seek(dt)
         sounds.flames:play()
         hs_timer = 0
         hs_totalTime = 45
+        sounds.placeholder:play()
         if not lights_off_played then
             sounds.lights_off:play()
             lights_off_played = true
@@ -1426,7 +1432,7 @@ function hide_and_seek(dt)
             sonic_demoexe.x = sonic_demoexe.x + (dx / abs(dx)) * 542 * dt
         end
 
-        local verticalSpeed = 305
+        local verticalSpeed = 220 --305
         local deadzone = 10
         if abs(dy) > deadzone then
             sonic_demoexe.y = sonic_demoexe.y + (dy / abs(dy)) * verticalSpeed * dt
@@ -1438,6 +1444,7 @@ function hide_and_seek(dt)
             updateSprite(dt, sonic_demoexe.float, sonic_demoexe)
         end
         if math.abs(dx) < 32 and math.abs(dy) < 32 then
+            sounds.placeholder:stop()
             tails_caught = true
             sonic_demoexe.physics_enabled = true
             tails.velocity.x = 0
@@ -1462,8 +1469,6 @@ local max_final_repeats = 4
 local animation_timer2 = 0
 local animation_timer3 = 0
 finished_transformation = false
-splash_timer = 0
-splash_done = false
 
 emhi_bg = fast.getImage("images/background/emerald hill.png")
 menu_finished = fast.getImage("images/background/menu_finished.png")
@@ -1535,8 +1540,6 @@ animHandlers.black_screen = function(dt)
         finished_transformation = true
         animation_phase = "done"
         frame_index3 = 1
-        splash_timer = 0
-        splash_done = false
     end
 end
 local animTime = 0.5
@@ -1562,22 +1565,6 @@ function menuscreen_update(dt)
         animation_timer = 0
         animHandlers[animation_phase](dt)
     end
-
-    --[[if finished_transformation and not splash_done then
-        splash_timer = splash_timer + dt * 2
-        if splash_timer >= 0.2011 then
-            splash_timer = 0
-            frame_index3 = frame_index3 + 1
-            if frame_index3 >= #splash_frames.splash then
-                frame_index3 = #splash_frames.splash
-                splash_done = true
-            end
-        end
-    end]]
-
-    splash_done = true
-
-    if splash_done then
         frameCounter = frameCounter + 1
         if frameCounter >= frameDelay then
             frameCounter = 0
@@ -1618,7 +1605,6 @@ function menuscreen_update(dt)
                 end
             end
         end
-    end
 
     if timer < animTime then
         timer = timer + dt
@@ -2003,12 +1989,14 @@ end
 local function drawNumberString(x, y, str)
     str = tostring(str)
     for i = 1, #str do
-        local ch = str:sub(i, i)
-        if ch:match("%d") then
-            love.graphics.draw(images.numbers, quads.numbers[tonumber(ch)], x, y)
+        local byte = str:byte(i)
+        if byte >= 48 and byte <= 57 then
+            local digit = byte - 48
+            love.graphics.draw(images.numbers, quads.numbers[digit], x, y)
             x = x + 9
-        elseif ch == ":" then
-            x = x + 7
+        elseif byte == 58 then
+            love.graphics.draw(images.numbers, quads.numbers[10], x, y)
+            x = x + 9
         end
     end
 end
@@ -2176,22 +2164,26 @@ end
 
 function preloadTiles()
     updateProjectionConstants()
-    local cy, sy = math.cos(-camera_3d.yaw), math.sin(-camera_3d.yaw)
-    local cp, sp = math.cos(-camera_3d.pitch), math.sin(-camera_3d.pitch)
+    local yaw, pitch = -camera_3d.yaw, -camera_3d.pitch
+    local cy, sy = math.cos(yaw), math.sin(yaw)
+    local cp, sp = math.cos(pitch), math.sin(pitch)
 
+    local camX, camY, camZ = camera_3d.x, camera_3d.y, camera_3d.z
     local n = 0
+
     for t = 1, #baseplateTiles do
         local tile = baseplateTiles[t]
         if inRenderDistance(tile) then
-            local verts = {}
             local visible = true
+            local verts = {}
 
             for i = 1, 4 do
                 local v = tile[i]
-                local x, y, z = v[1] - camera_3d.x, v[2] - camera_3d.y, v[3] - camera_3d.z
-                local x1, z1 = x * cy - z * sy, x * sy + z * cy
-                local y1 = y * cp - z1 * sp
-                local z2 = y * sp + z1 * cp
+                local dx, dy, dz = v[1] - camX, v[2] - camY, v[3] - camZ
+                local x1 = dx * cy - dz * sy
+                local z1 = dx * sy + dz * cy
+                local y1 = dy * cp - z1 * sp
+                local z2 = dy * sp + z1 * cp
 
                 if z2 <= 0.1 then
                     visible = false
@@ -2199,25 +2191,32 @@ function preloadTiles()
                 end
 
                 local invZ = 1 / (z2 * fovHalfTan)
-                verts[i * 2 - 1] = x1 * invZ / aspect * hw + hw
-                verts[i * 2]     = -y1 * invZ * hh + hh
+                local screenX = x1 * invZ / aspect * hw + hw
+                local screenY = -y1 * invZ * hh + hh
+
+                verts[i * 2 - 1] = screenX
+                verts[i * 2] = screenY
             end
 
             if visible then
-                local cx = (tile[1][1] + tile[3][1]) * 0.5 - camera_3d.x
-                local cyPos = (tile[1][2] + tile[3][2]) * 0.5 - camera_3d.y
-                local cz = (tile[1][3] + tile[3][3]) * 0.5 - camera_3d.z
-                local distSq = cx*cx + cyPos*cyPos + cz*cz
+                local v1, v3 = tile[1], tile[3]
+                local cx = (v1[1] + v3[1]) * 0.5 - camX
+                local cyMid = (v1[2] + v3[2]) * 0.5 - camY
+                local cz = (v1[3] + v3[3]) * 0.5 - camZ
+                local distSq = cx * cx + cyMid * cyMid + cz * cz
 
                 n = n + 1
-                preloadedTiles[n] = preloadedTiles[n] or {}
-                preloadedTiles[n].verts = verts
-                preloadedTiles[n].col = tile[1][4]
-                preloadedTiles[n].dist = distSq
+                local ptile = preloadedTiles[n] or {}
+                ptile.verts = verts
+                ptile.col = v1[4]
+                ptile.dist = distSq
+                preloadedTiles[n] = ptile
             end
         end
     end
-    for i = n + 1, #preloadedTiles do preloadedTiles[i] = nil end
+    for i = n + 1, #preloadedTiles do
+        preloadedTiles[i] = nil
+    end
 end
 
 function draw_demo3d()
@@ -2749,20 +2748,24 @@ end
 
 function drawStats()
     local x, y = 10, 10
-
     love.graphics.draw(images.score, x, y)
-    drawNumberString(x + 100, y - 1, tostring(stats.score))
-
+    drawNumberString(x + 100, y - 1, stats.score)
     local minutes = floor(gameTime / 60)
     local seconds = floor(gameTime % 60)
-    local timeStr = string.format("%d:%02d", minutes, seconds)
-
+    local timeStr
+    if seconds < 10 then
+        timeStr = minutes .. ":0" .. seconds
+    else
+        timeStr = minutes .. ":" .. seconds
+    end
     love.graphics.draw(images.time, x, y + 16)
     drawNumberString(x + 50, y + 15, timeStr)
-
-    love.graphics.draw(images.rings, quads.rings[ringAnimState and "top" or "bottom"], x, y + 32)
-    drawNumberString(x + 75, y + 31, tostring(stats.rings))
-
+    love.graphics.draw(
+        images.rings,
+        quads.rings[ringAnimState and "top" or "bottom"],
+        x, y + 32
+    )
+    drawNumberString(x + 75, y + 31, stats.rings)
     love.graphics.draw(images.william, x, 225)
 end
 
