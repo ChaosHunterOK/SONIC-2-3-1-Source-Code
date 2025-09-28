@@ -247,8 +247,10 @@ local function createCharacter(opts)
         spriteIndex = 1,
         currentSprite = nil,
         fakeAngle = 0,
+        jumpHeldTime = 0,
         _coyote = 0,
         _jumpBuf = 0,
+        _stuck_timer = 0,
         physics_enabled = opts.physics_enabled or false
     }
 end
@@ -945,6 +947,20 @@ function test_update(dt, char, map)
     char.grounded = char.grounded or false
     char._coyote = char._coyote or 0
     char._jumpBuf = char._jumpBuf or 0
+    char.jumpHeldTime = char.jumpHeldTime or 0
+
+    char._stuck_timer = char._stuck_timer or 0
+    if gamestate ~= char._last_gamestate then
+        char._stuck_timer = 0.15
+        char._last_gamestate = gamestate
+    end
+    if char._stuck_timer and char._stuck_timer > 0 then
+        char._stuck_timer = char._stuck_timer - dt
+        char.velocity.x = 0
+        char.velocity.y = 0
+        char.currentSprite = char.idle
+        return
+    end
 
     local vx, vy = char.velocity.x, char.velocity.y
 
@@ -1014,7 +1030,7 @@ function test_update(dt, char, map)
             end
             if (jump and grounded) or (char._jumpBuf > 0 and char._coyote > 0 and not char.jumping) then
                 vy = char.jumpHeight
-                char.jumping, char.grounded, char._jumpBuf = true, false, 0
+                char.jumping, char.grounded, char._jumpBuf, char.jumpHeldTime = true, false, 0, 0
                 if sounds and sounds.jump_sound then sounds.jump_sound:play() end
             end
 
@@ -1030,6 +1046,13 @@ function test_update(dt, char, map)
                 vx = vx + JUMP_VELOCITY * math.sin(slopeAngle) * -1
                 vy = JUMP_VELOCITY * math.cos(slopeAngle) -50
                 char.jumping, char.grounded = true, false
+            end
+
+            if char.jumping then
+                if jump and char.jumpHeldTime < JUMP_HOLD_TIME then
+                    char.jumpHeldTime = char.jumpHeldTime + dt
+                    vy = vy + gravity * dt * -0.6
+                end
             end
 
             local absVx = math.abs(vx)
@@ -1106,7 +1129,7 @@ function test_update(dt, char, map)
         if char.y >= mapHeight + 40 then love.event.quit() end
         updateCamera(dt, char, mapWidth, mapHeight)
     end
-    updateGamestate(dt, char)
+    updateGamestate(char)
 end
 
 local hs_timer = 7
@@ -1671,10 +1694,15 @@ end
 local prevGamestate = gamestate
 local waiting = 0
 
-function updateGamestate(dt, char)
+function updateGamestate(char)
     if gamestate ~= prevGamestate and gamestate ~= "eggman" then
         char.x = 100
         char.y = 50
+        prevGamestate = gamestate
+    end
+    if gamestate ~= prevGamestate and gamestate == "eggman" then
+        char.x = 2894
+        char.y = 1255
         prevGamestate = gamestate
     end
 end
@@ -2256,16 +2284,11 @@ local function draw_william()
         sounds.buildUPSound:play()
     end
 
-    local coastFadeStart, coastFadeEnd = 45, 45
-    local coastFadeStart2 = coastFadeStart * coastFadeStart
-    local coastFadeEnd2   = coastFadeEnd * coastFadeEnd
-
     for i = 1, #preloadedTiles do
         local t = preloadedTiles[i]
         if t.verts and #t.verts >= 6 then
-            local fade = clamp((coastFadeEnd2 - t.dist) / (coastFadeEnd2 - coastFadeStart2), 0, 1)
             local r, g, b = t.col[1] or 1, t.col[2] or 1, t.col[3] or 1
-            love.graphics.setColor(r, g, b, fade)
+            love.graphics.setColor(r, g, b, 1)
             love.graphics.polygon("fill", t.verts)
         end
     end
