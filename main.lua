@@ -71,7 +71,7 @@ local startTime = os.time()
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "testmap"
+local gamestate = "warning"
 
 local isMobile = false
 local os_device = love.system.getOS()
