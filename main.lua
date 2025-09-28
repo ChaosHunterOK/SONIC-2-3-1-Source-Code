@@ -1051,7 +1051,7 @@ function test_update(dt, char, map)
             if char.jumping then
                 if jump and char.jumpHeldTime < JUMP_HOLD_TIME then
                     char.jumpHeldTime = char.jumpHeldTime + dt
-                    vy = vy + gravity * dt * -0.6
+                    vy = vy + gravity * dt * -0.65
                 end
             end
 
