@@ -100,13 +100,29 @@ function fast.reduceMemory(dt)
             local alive, n = {}, 0
             for i = 1, #pool do
                 local s = pool[i]
-                if s and (s:isPlaying() or n < fast.maxSoundPool) then
+                if s and s:isPlaying() then
                     n = n + 1
                     alive[n] = s
                 end
             end
-            fast._soundPool[path] = alive
+            if #alive > 0 then
+                fast._soundPool[path] = alive
+            else
+                fast._soundPool[path] = nil
+                sounds[path] = nil
+            end
         end
+
+        for k, v in pairs(images) do
+            if not v then images[k] = nil end
+        end
+        for k, v in pairs(fonts) do
+            if not v then fonts[k] = nil end
+        end
+        for k, v in pairs(frames) do
+            if not v then frames[k] = nil end
+        end
+
         collectgarbage("collect")
     end
 end
