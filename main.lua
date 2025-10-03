@@ -71,7 +71,7 @@ local startTime = os.time()
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "warning"
+local gamestate = "menuscreen"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -155,7 +155,7 @@ local soundDefs = {
     enterSound = "sounds/enter.ogg",
     cr4sh_sound = "sounds/cr4sh_sound.mp3",
     sound_fix = "sounds/sound_fix.mp3",
-    reboot_old = "sounds/reboot_old.ogg",
+    reboot_old = "sounds/reboot_old.mp3",
     bossMusic = "music/Demo_fight.mp3",
     hitStatic = "sounds/hitStatic.ogg",
     placeholder = "music/placeholder.mp3",
@@ -600,7 +600,7 @@ function william_update(dt)
             demo_3d.current_side = 1
             demo_3d.has_stopped_once = true
         else
-            local speedFactor = 1 + math.max(0, (20 - dist) / 20) * 2
+            local speedFactor = 1 + max(0, (20 - dist) / 20) * 2
             local lerpAmt = dt * 4
             local targetVx = dx / dist * chaser.speed * speedFactor
             local targetVy = dy / dist * chaser.speed * speedFactor
@@ -622,9 +622,9 @@ function william_update(dt)
             hasPlayedFlashSound = true
         end
 
-        if math.abs(velX) > 0.01 or math.abs(velZ) > 0.01 then
+        if abs(velX) > 0.01 or abs(velZ) > 0.01 then
             local angle = getRelativeAngleFromMovement(camera_3d, chaser)
-            local index = math.floor(((angle + 180) / 45) + 0.5) % 8 + 1
+            local index = floor(((angle + 180) / 45) + 0.5) % 8 + 1
             demo_3d.current_side = index
         end
         if demo_3d.stop_timer >= 12 then
@@ -667,8 +667,11 @@ local function easeOutCubic(t)
     return 1 - (1 - t)^3
 end
 
-local function updateSprite(dt, spriteTable, char)
-    char.spriteIndex = char.spriteIndex + dt * 10
+local function updateSprite(dt, spriteTable, char, speed)
+    if not char.spriteIndex then
+        char.spriteIndex = 1
+    end
+    char.spriteIndex = char.spriteIndex + dt * (speed or 10)
     if char.spriteIndex >= #spriteTable + 1 then
         char.spriteIndex = 1
     end
@@ -981,8 +984,8 @@ function test_update(dt, char, map)
     snapToGround(char, map, dt)
     local grounded = char.grounded
 
-    char._coyote = grounded and COYOTE_TIME or math.max(0, char._coyote - dt)
-    char._jumpBuf = jump and JUMP_BUFFER or math.max(0, char._jumpBuf - dt)
+    char._coyote = grounded and COYOTE_TIME or max(0, char._coyote - dt)
+    char._jumpBuf = jump and JUMP_BUFFER or max(0, char._jumpBuf - dt)
 
     if char == sonic_demoexe and isDemoWithPhysics then
         if grounded then
@@ -1024,13 +1027,13 @@ function test_update(dt, char, map)
                 end
                 if grounded then
                     vx = vx * (1 - GROUND_FRICTION)
-                    if math.abs(vx) < 0.1 then
+                    if abs(vx) < 0.1 then
                         vx = 0
                     end
                 else
                     vx = vx * AIR_DRAG
                 end
-                if math.abs(vx) == 0 and not char.jumping then
+                if abs(vx) == 0 and not char.jumping then
                     char.angle, char.fakeAngle = 0, 0
                 end
             end
@@ -1061,7 +1064,7 @@ function test_update(dt, char, map)
                 end
             end
 
-            local absVx = math.abs(vx)
+            local absVx = abs(vx)
             if not char.grounded then
                 if char.jumping then
                     if char.jump then updateSprite(dt, char.jump, char) end
@@ -1487,13 +1490,12 @@ function hide_and_seek(dt)
 end
 
 local animation_phase = "initial"
-local animation_timer = 0
 local frame_index = 1
-local max_repeats = 12
 local repeat_count = 0
 local animation_timer2 = 0
 local animation_timer3 = 0
 finished_transformation = false
+local bg_vis = true
 
 emhi_bg = fast.getImage("images/background/emerald hill.png")
 menu_finished = fast.getImage("images/background/menu_finished.png")
@@ -1502,11 +1504,16 @@ menu = fast.getImage("images/background/menu.png")
 local bgX1 = 0
 local bgX2 = menu:getWidth()
 local scroll_speed = 50
+anim_timer = 0
 
 local ANIM_SPEED = 0.25
 local animHandlers = {}
 
-animHandlers.initial = function(dt)
+function nextFrame(frames, idx)
+    return (idx % #frames) + 1
+end
+
+animHandlers.initial = function()
     frame_index = frame_index + 1
     if frame_index > #frames then
         frame_index = 1
@@ -1514,10 +1521,10 @@ animHandlers.initial = function(dt)
     end
 end
 
-animHandlers.repeatable = function(dt)
-    frame_index = (frame_index % #repeatable_frames) + 1
+animHandlers.repeatable = function()
+    frame_index = nextFrame(repeatable_frames, frame_index)animation_phase = "repeatable"
     repeat_count = repeat_count + 1
-    if repeat_count >= max_repeats * #repeatable_frames then
+    if repeat_count >= (12 * #repeatable_frames) then
         repeat_count = 0
         animation_phase = "screen"
     end
@@ -1530,16 +1537,11 @@ animHandlers.screen = function(dt)
     end
 end
 
-local repeatable2_timer = 0
-local repeatable2_frame_duration = 0.075
-local bg_vis = true
-
 animHandlers.repeatable2 = function(dt)
-    repeatable2_timer = repeatable2_timer + dt
-    if repeatable2_timer >= repeatable2_frame_duration then
-        repeatable2_timer = repeatable2_timer - repeatable2_frame_duration
-
-        frame_index = (frame_index % #repeatable2_frames) + 1
+    animation_timer3 = animation_timer3 + dt
+    if animation_timer3 >= 0.075 then
+        animation_timer3 = 0
+        frame_index = nextFrame(repeatable2_frames, frame_index)
         repeat_count = repeat_count + 1
 
         if repeat_count == 23 then
@@ -1565,7 +1567,7 @@ animHandlers.black_screen = function(dt)
         animation_phase = "done"
     end
 end
-local animTime = 0.5
+local animTime = 0.876
 local timer = 0
 local pressTextAnimTime = 2.2
 local pressTextTimer = 0
@@ -1579,62 +1581,52 @@ local flickerTimer = 0
 local flickerInterval = 0.1
 local showPressText = true
 local flickerActive = false
+flickerRepeat = 0
 flickerMaxRepeats = 15
 link = "https://docs.google.com/document/d/1J0nOXnQMULgsqhbdnPfF3uHCHJ0wMvX1BC4TgXKVpX8"
 function menuscreen_update(dt)
     if gamestate ~= "menuscreen" then return end
-    animation_timer = animation_timer + dt
-    if animation_timer >= ANIM_SPEED and animHandlers[animation_phase] then
-        animation_timer = 0
+    anim_timer = anim_timer + dt
+    if anim_timer >= ANIM_SPEED and animHandlers[animation_phase] then
+        anim_timer = 0
         animHandlers[animation_phase](dt)
     end
-        frameCounter = frameCounter + 1
-        if frameCounter >= frameDelay then
-            frameCounter = 0
-            frames_idk_d = frames_idk_d + 1
-            if frames_idk_d > #splash_frames.idle then
-                frames_idk_d = 1
-            end
-        end
-        if finished_transformation then
-            pressTextTimer = math.min(pressTextTimer + dt, pressTextAnimTime)
+    frameCounter = frameCounter + 1
+    if frameCounter >= frameDelay then
+        frameCounter = 0
+        frames_idk_d = nextFrame(splash_frames.idle, frames_idk_d)
+    end
+    if finished_transformation then
+        pressTextTimer = min(pressTextTimer + dt, pressTextAnimTime)
+        if not sounds.buildUPSound:isPlaying() then
             sounds.buildUPSound:play()
         end
-
-        if (love.keyboard.isDown("return") or jumpButton.active) and finished_transformation then
-            if sounds.laugh_sound then
-                sounds.lights_off:play()
-                sounds.laugh_sound:play()
-            end
-
-            if not flickerActive then
-                flickerActive = true
-                flickerRepeat = 0
-                flickerTimer = 0
-                flickerSpeed = flickerInterval
-                flickerMaxRepeats = 15
+    end
+    if finished_transformation and (love.keyboard.isDown("return") or jumpButton.active) then
+        if sounds.laugh_sound and not flickerActive then
+            sounds.lights_off:play()
+            sounds.laugh_sound:play()
+            flickerActive = true
+            flickerRepeat, flickerTimer = 0, 0
+        end
+    end
+    if flickerActive then
+        flickerTimer = flickerTimer + dt
+        if flickerTimer >= flickerInterval then
+            flickerTimer = 0
+            showPressText = not showPressText
+            flickerRepeat = flickerRepeat + 1
+            if flickerRepeat >= flickerMaxRepeats then
+                flickerActive = false
+                showPressText = false
+                shrinkingMenu = true
             end
         end
-
-        if flickerActive then
-            flickerTimer = flickerTimer + dt
-            if flickerTimer >= flickerSpeed then
-                flickerTimer = 0
-                showPressText = not showPressText
-                flickerRepeat = flickerRepeat + 1
-                if flickerRepeat >= flickerMaxRepeats then
-                    flickerActive = false
-                    showPressText = false
-                    shrinkingMenu = true
-                end
-            end
-        end
-
+    end
     if timer < animTime then
         timer = timer + dt
     end
 end
-
 local zoomTimer = 0
 local zoomDuration = 2
 
@@ -1756,13 +1748,11 @@ local joystickCooldown = 0
 local returnPressed = false
 errorSoundPlayed = false
 
+scrollX = 0
 local function updateScrollingBG(dt)
     if animation_phase == "initial" or not bg_vis then return end
-
     local width = menu:getWidth()
-    bgX1, bgX2 = bgX1 + scroll_speed * dt, bgX2 + scroll_speed * dt
-    if bgX1 >= width then bgX1 = bgX2 - width elseif bgX1 <= -width then bgX1 = bgX2 + width end
-    if bgX2 >= width then bgX2 = bgX1 - width elseif bgX2 <= -width then bgX2 = bgX1 + width end
+    scrollX = (scrollX + scroll_speed * dt) % width
 end
 
 local function eggmanCrashThing(dt)
@@ -2126,10 +2116,10 @@ local function char_draw(char, offsetX, offsetY)
     love.graphics.draw(sprite, drawX, drawY, char.fakeAngle, flipX, 1, ox, oy)
 end
 
-local function drawScrollingBG(image, x1, x2, offsetX, offsetY)
-    local screenW = base_width
-    if x1 + offsetX + image:getWidth() > 0 and x1 + offsetX < screenW then love.graphics.draw(image, x1 + offsetX, offsetY) end
-    if x2 + offsetX + image:getWidth() > 0 and x2 + offsetX < screenW then love.graphics.draw(image, x2 + offsetX, offsetY) end
+local function drawScrollingBG(img, x1, x2, x, y)
+    local width = img:getWidth()
+    love.graphics.draw(img, -scrollX + x, y)
+    love.graphics.draw(img, -scrollX + width + x, y)
 end
 
 DEMO_MenuScreen = fast.getImage(spritesFolder.."menuscreen/splash/6.png")
@@ -2146,25 +2136,32 @@ function linear(a, b, t)
     a = tonumber(a) or 0
     b = tonumber(b) or 0
     t = tonumber(t) or 0
-    if t < 0 then t = 0 elseif t > 1 then t = 1 end
-
+    t = max(0, min(1, t))
     return a + (b - a) * t
 end
 
 function openURL(url)
-    local success = false
     local osType = love.system.getOS()
+    local command
 
     if osType == "Windows" then
-        success = os.execute('start "" "' .. url .. '"')
+        command = 'start "" "' .. url .. '"'
     elseif osType == "OS X" then
-        success = os.execute('open "' .. url .. '"')
+        command = 'open "' .. url .. '"'
     else
-        success = os.execute('xdg-open "' .. url .. '"')
+        command = 'xdg-open "' .. url .. '"'
+    end
+
+    local result, exitType, exitCode = os.execute(command)
+    local success = false
+    if type(result) == "number" then
+        success = result == 0
+    elseif type(result) == "boolean" then
+        success = result
     end
 
     if not success then
-        print("Failed to open URL.")
+        print("Failed to open URL:", url)
     end
 end
 
@@ -2333,11 +2330,11 @@ function draw_menuscreen()
 
         local t = min(pressTextTimer / pressTextAnimTime, 1)
         local easedT = easeInOutCubic(t)
-        local currentY = pressTextStartY + (pressTextTargetY - pressTextStartY) * easedT
+        local currentY2 = pressTextStartY + (pressTextTargetY - pressTextStartY) * easedT
         local text = "Press start to play."
         local textWidth = FontBig:getWidth(text)
         if not flickerActive or showPressText then
-            love.graphics.print(text, (base_width - textWidth) / 2 + offsetX * 0.5 + 70, currentY + offsetY * 0.4)
+            love.graphics.print(text, (base_width - textWidth) / 2 + offsetX * 0.5 + 70, currentY2 + offsetY * 0.4)
         end
         love.graphics.pop()
         return
@@ -2352,8 +2349,8 @@ function draw_menuscreen()
     local demoX = (base_width - DEMO_MenuScreen:getWidth()) / 2
     local demoY = (base_height - DEMO_MenuScreen:getHeight()) / 2
 
-    local t = min(timer / animTime, 1)
-    local currentY = linear(demoY + 10, demoY - 10, t)
+    local t = min(timer / animTime, 6)
+    local currentY = linear(demoY + 40, demoY -10, t)
 
     local circleX = (base_width - circle:getWidth()) / 2
     local circleY = (base_height - circle:getHeight()) / 2
@@ -2365,10 +2362,10 @@ function draw_menuscreen()
     if animation_phase == "initial" then
         love.graphics.draw(frames[frame_index], demoX, currentY)
     elseif animation_phase == "repeatable" then
-        love.graphics.draw(repeatable_frames[frame_index], demoX, demoY - 10)
+        love.graphics.draw(repeatable_frames[frame_index], demoX, currentY)
     elseif animation_phase == "repeatable2" then
         sounds.sonic_theme:stop()
-        love.graphics.draw(repeatable2_frames[frame_index], demoX, demoY - 10)
+        love.graphics.draw(repeatable2_frames[frame_index], demoX, currentY)
     end
 
     if animation_phase ~= "repeatable2" then
