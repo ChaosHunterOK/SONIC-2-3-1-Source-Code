@@ -71,7 +71,7 @@ local startTime = os.time()
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "menuscreen"
+local gamestate = "credits"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -164,6 +164,7 @@ local soundDefs = {
     S3K_9A = "sounds/S3K_9A.wav",
     lights_off = "sounds/lights-sound-effect.mp3",
     error_sound = "sounds/error_sound.mp3",
+    sound = "sounds/sound.mp3",
     sonic_error_sound = "sounds/sonic_error_sound.mp3"
 }
 
@@ -1604,7 +1605,7 @@ function menuscreen_update(dt)
     end
     if finished_transformation and (love.keyboard.isDown("return") or jumpButton.active) then
         if sounds.laugh_sound and not flickerActive then
-            sounds.lights_off:play()
+            sounds.sound:play()
             sounds.laugh_sound:play()
             flickerActive = true
             flickerRepeat, flickerTimer = 0, 0
@@ -1637,24 +1638,14 @@ reboot_vis = false
 reboot_vis2 = false
 
 local helloWilliamTimer = 0
-
-function drawStageName(img, x, y)
-    love.graphics.draw(img, x, y)
-end
-function drawStageCircle(img, x, y)
-    love.graphics.draw(img, x, y)
-end
-function drawStageAct(img, x, y)
-    love.graphics.draw(img, x, y)
-end
 local greenHillZoneTitle = fast.getImage("images/zone/titles/zone.png")
 local hideAndSeekZoneTitle = fast.getImage("images/zone/titles/h&s.png")
 local DotTitle = fast.getImage("images/zone/titles/dot.png")
 function drawTitleCard(stageNameImg, circleImg, actImg, baseX, baseY)
-    drawStageCircle(circleImg, baseX + 10, baseY)
-    drawStageName(stageNameImg, -baseX + 225, baseY)
+    love.graphics.draw(circleImg, baseX + 10, baseY)
+    love.graphics.draw(stageNameImg, -baseX + 225, baseY)
     love.graphics.draw(stageActImg, baseX + greenHillZoneTitle:getWidth() - 25, baseY + circleImg:getHeight() - 4)
-    drawStageAct(actImg, baseX + greenHillZoneTitle:getWidth() + 10, baseY + circleImg:getHeight() - 20)
+    love.graphics.draw(actImg, baseX + greenHillZoneTitle:getWidth() + 10, baseY + circleImg:getHeight() - 20)
 end
 
 stageTitleTimer = 0
@@ -1698,7 +1689,6 @@ function updateGamestate(char, fellOff)
         default = {x = 100, y = 630},
         eggman  = {x = 2894, y = 1255}
     }
-
     local spawn = (gamestate == "eggman") and spawns.eggman or spawns.default
     if gamestate ~= prevGamestate or fellOff then
         char.x, char.y = spawn.x, spawn.y
@@ -2627,7 +2617,6 @@ function love.draw()
             love.graphics.setColor(1,1,1,crashAlpha)
             love.graphics.rectangle("fill",0,0,base_width,base_height)
         end
-
     elseif gamestate == "torture" and tort_visible then
         love.graphics.setColor(1,1,1,0.355)
         if sonic_demoexe_screen.currentSprite then
