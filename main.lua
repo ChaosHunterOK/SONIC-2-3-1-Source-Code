@@ -51,7 +51,7 @@ function love.errhand(msg)
         end
 
         love.graphics.printf(errorMessage, xOffset, 100, screenW - xOffset - 50, "left")
-        love.graphics.printf("DM copilucusarmale on Discord to report this goofy error", xOffset, 35, screenW - xOffset - 50, "left")
+        love.graphics.printf("DM copilucusarmale or saunter_thesequel on Discord to report this goofy error", xOffset, 35, screenW - xOffset - 50, "left")
 
         local btnX = xOffset
         for i, btn in ipairs(buttons) do
@@ -71,7 +71,7 @@ local startTime = os.time()
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "credits"
+local gamestate = "eggman"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -117,10 +117,7 @@ local bush_img = fast.getImage("images/bush.png")
 local egg_mob = fast.getImage("images/egg_mob.png")
 
 jumpscare = fast.getImage("images/jump.png")
-
 knuck_bg = fast.getImage("images/background/knuck.png")
-knuck_bg2 = fast.getImage("images/background/knuck2.png")
-knuck_bg3 = fast.getImage("images/background/knuck3.png")
 
 local selectionImages = {
     selection_box = fast.getImage("images/selection/box.png"),
@@ -453,6 +450,7 @@ function love.load()
         vsync = true,
         highdpi = true,
     })
+    fast.fpsCap = 64
     love.window.setTitle("SONIC 2 3 1")
     love.window.setIcon(love.image.newImageData("images/game_icon.png"))
     canvas = love.graphics.newCanvas(base_width, base_height)
@@ -518,8 +516,6 @@ function love.load()
 
     startTime = love.timer.getTime()
     freezeScreen = false
-
-    startTime = love.timer.getTime()
 
     baseplateTiles = createBaseplate(thing, thing)
 
@@ -923,7 +919,7 @@ function applySlopePhysics(char, vx, vy, slopeAngle, dt)
     local sinA, cosA = math.sin(slopeAngle), math.cos(slopeAngle)
     local vxs = speed * cosA
     local vys = speed * sinA
-    vy = vy + 400 * dt  
+    vy = vy + 400 * dt
 
     return vxs, vy + vys
 end
@@ -960,11 +956,11 @@ function test_update(dt, char, map)
     char.jumpHeldTime = char.jumpHeldTime or 0
 
     char._stuck_timer = char._stuck_timer or 0
-    if gamestate ~= char._last_gamestate then
+    if gamestate ~= char._last_gamestate and char ~= sonic_demoexe then
         char._stuck_timer = 0.15
         char._last_gamestate = gamestate
     end
-    if char._stuck_timer and char._stuck_timer > 0 then
+    if char._stuck_timer and char._stuck_timer > 0 and char ~= sonic_demoexe then
         char._stuck_timer = char._stuck_timer - dt
         char.velocity.x = 0
         char.velocity.y = 0
@@ -1175,7 +1171,7 @@ bossfightActive = false
 blackScreen = false
 blackTimer = 0
 
-local function handleBounce(knuck, demo, dt)
+local function handleBounce(knuck, demo, dt, map)
     local overlapX = abs(knuck.x - demo.x) < (knuck.width + demo.width) / 2
     local overlapY = abs(knuck.y - demo.y) < (knuck.height + demo.height) / 2
 
@@ -1192,6 +1188,13 @@ local function handleBounce(knuck, demo, dt)
                 demo.currentSprite = demo.fall
                 demo.spriteIndex = 1
                 demo.fallTimer = 0
+                if map then
+                    local safety = 0
+                    while checkCollision(demo, map, demo.x, demo.y) and safety < 32 do
+                        demo.y = demo.y - 1
+                        safety = safety + 1
+                    end
+                end
             else
                 knuck.velocity.y = -bounceStrength
                 demo.velocity.y = -bounceStrength
@@ -1199,7 +1202,6 @@ local function handleBounce(knuck, demo, dt)
                 knuck.grounded = false
                 demo.jumping = true
                 demo.grounded = false
-
                 local horizontalPush = 50
                 if knuck.x < demo.x then
                     knuck.velocity.x = knuck.velocity.x - horizontalPush
@@ -1207,6 +1209,19 @@ local function handleBounce(knuck, demo, dt)
                 else
                     knuck.velocity.x = knuck.velocity.x + horizontalPush
                     demo.velocity.x = demo.velocity.x - horizontalPush
+                end
+
+                if map then
+                    local safety = 0
+                    while checkCollision(demo, map, demo.x, demo.y) and safety < 32 do
+                        demo.y = demo.y - 1
+                        safety = safety + 1
+                    end
+                    safety = 0
+                    while checkCollision(knuck, map, knuck.x, knuck.y) and safety < 32 do
+                        knuck.y = knuck.y - 1
+                        safety = safety + 1
+                    end
                 end
             end
         end
@@ -1227,35 +1242,23 @@ function knuck_up(dt)
     if not demo_vis then
         local demo = sonic_demoexe
         demo.currentSprite = demo.crouch
-        demo.x, demo.y, demo.direction = 6453, 772, -1
+        demo.x, demo.y, demo.direction = 6453, 788, -1
     end
 
     if knuckles.x >= 2400 then stage1_vis = false end
     if knuckles.x >= 4250 then
-        stage2_vis, knuck_bg, demo_vis = false, knuck_bg2, true
+        stage2_vis, knuck_bg, demo_vis = false, fast.getImage("images/background/knuck2.png"), true
     end
     if knuckles.x >= 5350 then
-        stage3_vis, knuck_bg = false, knuck_bg3
+        stage3_vis, knuck_bg = false, fast.getImage("images/background/knuck3.png")
     end
 
     if knuckles.x <= 5990 then return end
 
     waiting_knuck = waiting_knuck + dt
-    test_update(dt, sonic_demoexe, "map2")
-
     local map2 = getMap("map2")
     if not map2 then return end
-
-    local targetCamX, camSpeed = map2.width - base_width, 950
-    if not camera.locked then
-        if camera.x < targetCamX then
-            camera.x = min(camera.x + camSpeed * dt, targetCamX)
-        end
-        if camera.x >= targetCamX then
-            camera.x = targetCamX
-            camera.locked = true
-        end
-    end
+    camera.x = map2.width - base_width
     idk_fix = true
 
     if waiting_knuck >= 2 and not bossfightActive and not blackScreen then
@@ -1287,6 +1290,7 @@ function knuck_up(dt)
 
     local demo = sonic_demoexe
     if bossfightActive and demo then
+        test_update(dt, demo, "map2")
         demo.physics_enabled = false
         if demo.x > 6484 then
             demo.direction = -1
@@ -1311,7 +1315,7 @@ function knuck_up(dt)
                 demo.jumping, demo.grounded = true, false
             end
         end
-        handleBounce(knuckles, demo, dt)
+        handleBounce(knuckles, demo, dt, "map2")
 
         if demo.velocity.x < targetSpeed then
             demo.velocity.x = min(demo.velocity.x + demo_speed * dt, targetSpeed)
@@ -1338,54 +1342,35 @@ end
 
 local error_sound_played = false
 function eggman_up(dt)
-    if eggman.x < 1472 then
-        if sonic_demoexe.grounded then
-            updateSprite(dt, sonic_demoexe.float, sonic_demoexe)
+    if eggman.x >= 1472 then
+        sonic_demoexe.x, sonic_demoexe.y = 2894, 1255
+        return
+    end
+
+    local demo = sonic_demoexe
+    local dx, dy = eggman.x - demo.x, eggman.y - demo.y
+
+    if demo.grounded then
+        updateSprite(dt, demo.float, demo)
+    elseif abs(dy) > 50 then
+        demo.velocity.y = demo.jumpHeight
+        updateSprite(dt, demo.fly, demo)
+    end
+    if dx ~= 0 then
+        demo.x = demo.x + (dx / abs(dx)) * 682 * dt
+    end
+    if abs(dy) > 10 then
+        demo.y = demo.y + (dy / abs(dy)) * 305 * dt
+    end
+    demo.direction = (eggman.x > demo.x) and 1 or -1
+    if not crashing and abs(dx) < 125 and abs(dy) < 125 then
+        crashing, crashTimer = true, 0
+        charStatus.eggman_alive, charStatus.eggman_lock = false, false
+        sounds.egg:stop()
+        if not error_sound_played then
+            sounds.error_sound:play()
+            error_sound_played = true
         end
-
-        if abs(eggman.y - sonic_demoexe.y) > 50 then
-            sonic_demoexe.velocity.y = sonic_demoexe.jumpHeight
-            updateSprite(dt, sonic_demoexe.fly, sonic_demoexe)
-        end
-
-        local dx = eggman.x - sonic_demoexe.x
-        local dy = eggman.y - sonic_demoexe.y
-
-        if dx ~= 0 then
-            sonic_demoexe.x = sonic_demoexe.x + (dx / abs(dx)) * 682 * dt
-        end
-
-        local verticalSpeed = 305
-        local deadzone = 10
-
-        if abs(dy) > deadzone then
-            sonic_demoexe.y = sonic_demoexe.y + (dy / abs(dy)) * verticalSpeed * dt
-        end
-
-        if eggman.x > sonic_demoexe.x then
-            sonic_demoexe.direction = 1
-        else
-            sonic_demoexe.direction = -1
-        end
-
-        local triggerDistance = 125
-
-        local dx = abs(eggman.x - sonic_demoexe.x)
-        local dy = abs(eggman.y - sonic_demoexe.y)
-
-        if not crashing and dx < triggerDistance and dy < triggerDistance then
-            crashing = true
-            crashTimer = 0
-            charStatus.eggman_alive = false
-            charStatus.eggman_lock = false
-            if not error_sound_played then
-                sounds.error_sound:play()
-                error_sound_played = true
-            end
-        end
-    else
-        sonic_demoexe.x = 2894
-        sonic_demoexe.y = 1255
     end
 end
 
@@ -1474,7 +1459,7 @@ function hide_and_seek(dt)
         elseif sonic_demoexe.grounded and sonic_demoexe.float then
             updateSprite(dt, sonic_demoexe.float, sonic_demoexe)
         end
-        if math.abs(dx) < 32 and math.abs(dy) < 32 then
+        if abs(dx) < 32 and abs(dy) < 32 then
             sounds.placeholder:stop()
             tails_caught = true
             sonic_demoexe.physics_enabled = true
@@ -1501,9 +1486,6 @@ local bg_vis = true
 emhi_bg = fast.getImage("images/background/emerald hill.png")
 menu_finished = fast.getImage("images/background/menu_finished.png")
 menu = fast.getImage("images/background/menu.png")
-
-local bgX1 = 0
-local bgX2 = menu:getWidth()
 local scroll_speed = 50
 anim_timer = 0
 
@@ -1842,6 +1824,7 @@ function checkStageTitle(gamestate, stages)
 end
 
 function love.update(dt)
+    fast.limitFPS()
     if resizeFreezeTimer > 0 then
         resizeFreezeTimer = resizeFreezeTimer - dt
         if resizeFreezeTimer < 0 then
@@ -2106,7 +2089,7 @@ local function char_draw(char, offsetX, offsetY)
     love.graphics.draw(sprite, drawX, drawY, char.fakeAngle, flipX, 1, ox, oy)
 end
 
-local function drawScrollingBG(img, x1, x2, x, y)
+local function drawScrollingBG(img, x, y)
     local width = img:getWidth()
     love.graphics.draw(img, -scrollX + x, y)
     love.graphics.draw(img, -scrollX + width + x, y)
@@ -2333,7 +2316,7 @@ function draw_menuscreen()
     sounds.sonic_theme:setLooping(true)
     local colorMod = (animation_phase == "repeatable2") and 0.5 or 1
     love.graphics.setColor(colorMod, colorMod, colorMod)
-    drawScrollingBG(menu, bgX1, bgX2, 0, 0)
+    drawScrollingBG(menu, 0, 0)
     love.graphics.setColor(1, 1, 1)
 
     local demoX = (base_width - DEMO_MenuScreen:getWidth()) / 2
@@ -2486,7 +2469,7 @@ function love.draw()
         local mx, my = love.mouse.getPosition()
         local px = (max(0, min(base_width, (mx-offset_x)/scale_factor)) - base_width/2) * 0.05
         local py = (max(0, min(base_height, (my-offset_y)/scale_factor)) - base_height/2) * 0.05
-        drawScrollingBG(menu_finished, bgX1, bgX2, px*0.5, py*0.4)
+        drawScrollingBG(menu_finished, px*0.5, py*0.4)
     end
 
     if gamestate == "menuscreen" then
@@ -2497,7 +2480,7 @@ function love.draw()
         sounds.buildUPSound:stop()
         sounds.green_hill:play()
         love.graphics.setColor(currentColor)
-        drawScrollingBG(emhi_bg, bgX1, bgX2, 0,0)
+        drawScrollingBG(emhi_bg, 0,0)
         love.graphics.setColor(1,1,1)
 
         love.graphics.push()
@@ -2542,7 +2525,7 @@ function love.draw()
 
     elseif gamestate == "knuck" then
         love.graphics.push()
-        drawScrollingBG(knuck_bg,bgX1,bgX2,0,0)
+        drawScrollingBG(knuck_bg,0,0)
         love.graphics.translate(-camX,-camY)
         love.graphics.draw(mapImages.knuck1)
         char_draw(knuckles,0,-2)
@@ -2601,7 +2584,7 @@ function love.draw()
         love.graphics.setColor(1, 1, 1)
     elseif gamestate == "eggman" then
         sounds.egg:play()
-        if not crashing2 then drawScrollingBG(menu,bgX1,bgX2,0,0) end
+        if not crashing2 then drawScrollingBG(menu,0,0) end
         love.graphics.push()
         love.graphics.translate(-camX,-camY)
         love.graphics.draw(egg_mob,3200,903)
@@ -2697,6 +2680,7 @@ function love.draw()
     if isMobile then mobile_stuff_draw() end
     love.graphics.setCanvas()
     love.graphics.draw(canvas, offset_x, offset_y, 0, scale_factor, scale_factor)
+    fast.drawFPS(10, 10)
 end
 
 function quantizeColor(r, g, b, levels)
@@ -2798,16 +2782,16 @@ function updateCanvasScale()
     local scale_x = window_width / base_width
     local scale_y = window_height / base_height
 
-    scale_factor = math.min(scale_x, scale_y)
+    scale_factor = min(scale_x, scale_y)
 
     local scaled_width = base_width * scale_factor
     local scaled_height = base_height * scale_factor
 
-    offset_x = math.floor((window_width - scaled_width) / 2 + 0.5)
-    offset_y = math.floor((window_height - scaled_height) / 2 + 0.5)
+    offset_x = floor((window_width - scaled_width) / 2 + 0.5)
+    offset_y = floor((window_height - scaled_height) / 2 + 0.5)
 
-    offset_x = math.max(0, offset_x)
-    offset_y = math.max(0, offset_y)
+    offset_x = max(0, offset_x)
+    offset_y = max(0, offset_y)
 
     if transitionCanvas then
         safeRelease(transitionCanvas)
@@ -2910,4 +2894,8 @@ function quantize(v)
     else
         return -1
     end
+end
+
+function love.quit()
+    fast.clearAll()
 end

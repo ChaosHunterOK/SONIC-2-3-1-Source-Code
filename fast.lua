@@ -80,11 +80,9 @@ function fast.getFrames(basePath, count)
     else
         local files = love.filesystem.getDirectoryItems(basePath)
         table.sort(files)
-        local n = 0
         for _, file in ipairs(files) do
             if file:sub(-4):lower() == ".png" then
-                n = n + 1
-                fr[n] = fast.getImage(basePath .. file)
+                fr[#fr + 1] = fast.getImage(basePath .. file)
             end
         end
     end
@@ -113,15 +111,9 @@ function fast.reduceMemory(dt)
             end
         end
 
-        for k, v in pairs(images) do
-            if not v then images[k] = nil end
-        end
-        for k, v in pairs(fonts) do
-            if not v then fonts[k] = nil end
-        end
-        for k, v in pairs(frames) do
-            if not v then frames[k] = nil end
-        end
+        for k, v in pairs(images) do if not v then images[k] = nil end end
+        for k, v in pairs(fonts) do if not v then fonts[k] = nil end end
+        for k, v in pairs(frames) do if not v then frames[k] = nil end end
 
         collectgarbage("collect")
     end
@@ -157,6 +149,29 @@ function fast.drawTextOutline(text, x, y, color, outlineColor, outlineSize)
 
     setColor(color)
     print(text, x, y)
+end
+
+function fast.clearAll()
+    for k in pairs(images) do images[k] = nil end
+    for k in pairs(fonts) do fonts[k] = nil end
+    for k in pairs(sounds) do sounds[k] = nil end
+    for k in pairs(frames) do frames[k] = nil end
+    fast._soundPool = {}
+    collectgarbage("collect")
+end
+
+function fast.drawFPS(x, y)
+    x, y = x or 10, y or 10
+    local fps = lt.getFPS()
+    local color
+    if fps >= 55 then
+        color = {0, 1, 0, 1}
+    elseif fps >= 30 then
+        color = {1, 1, 0, 1}
+    else
+        color = {1, 0, 0, 1}
+    end
+    fast.drawTextOutline("FPS: " .. fps, x, y, color, {0, 0, 0, 1}, 1)
 end
 
 return fast
