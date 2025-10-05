@@ -71,7 +71,7 @@ local startTime = os.time()
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "eggman"
+local gamestate = "warning"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -2680,7 +2680,7 @@ function love.draw()
     if isMobile then mobile_stuff_draw() end
     love.graphics.setCanvas()
     love.graphics.draw(canvas, offset_x, offset_y, 0, scale_factor, scale_factor)
-    fast.drawFPS(10, 10)
+    --fast.drawFPS(10, 10)
 end
 
 function quantizeColor(r, g, b, levels)
