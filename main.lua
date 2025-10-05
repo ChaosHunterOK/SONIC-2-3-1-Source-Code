@@ -1732,6 +1732,7 @@ local function eggmanCrashThing(dt)
         love.window.setTitle("SONIC 2 3 1")
         test_update(dt, eggman, "map3")
         eggman_up(dt)
+        sounds.egg:play()
         return
     end
 
@@ -2583,7 +2584,6 @@ function love.draw()
         end
         love.graphics.setColor(1, 1, 1)
     elseif gamestate == "eggman" then
-        sounds.egg:play()
         if not crashing2 then drawScrollingBG(menu,0,0) end
         love.graphics.push()
         love.graphics.translate(-camX,-camY)
