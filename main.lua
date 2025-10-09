@@ -71,7 +71,7 @@ local startTime = os.time()
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "warning"
+local gamestate = "william"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -81,7 +81,7 @@ end
 
 gravity = 625
 
-local floor, abs, min, max, atan2, deg = math.floor, math.abs, math.min, math.max, math.atan2, math.deg
+local floor, abs, min, max, atan2, deg, sqrt, sin, cos = math.floor, math.abs, math.min, math.max, math.atan2, math.deg, math.sqrt, math.sin, math.cos
 local thing = 650
 local camera = {x = 0, y = 0, targetX = 0, targetY = 0, locked = false}
 local camera_3d = {x = thing / 2, y = 5, z = thing / 2, yaw = 0, pitch = 0, roll = 0}
@@ -155,7 +155,7 @@ local soundDefs = {
     reboot_old = "sounds/reboot_old.mp3",
     bossMusic = "music/Demo_fight.mp3",
     hitStatic = "sounds/hitStatic.ogg",
-    placeholder = "music/placeholder.mp3",
+    placeholder = "music/exeexe.exe thing.mp3",
     jump_sound = "sounds/jump_sound.mp3",
     laugh_sound = "sounds/laugh.mp3",
     S3K_9A = "sounds/S3K_9A.wav",
@@ -483,6 +483,7 @@ function love.load()
         {name = "Saunter", role = "Coder, Composer", img = "saunter.png"},
         {name = "Trigavid", role = "Composer", img = "trigavid.png"},
         {name = "Irealism01", role = "Game tester (for mobile)", img = "irealism01.png"},
+        {name = "Riadlyn", role = "Composer", img = "riadlyn.png"},
         {name = "SEGA", role = "Sonic, Tails, Knuckles, Eggman and mostly the rest", img = "sega.png"},
         {name = "RealDev", role = "the Sonic 1 Title Screen Font (Expanded)", img = "RealDev.png"}
     }
@@ -550,24 +551,23 @@ end
 
 hasPlayedFlashSound = false
 function william_update(dt)
+    sounds.egg:stop()
     local smoothSpeed = 8
     camera_3d.yaw = camera_3d.yaw + (targetYaw - camera_3d.yaw) * min(dt * smoothSpeed, 1)
     camera_3d.pitch = camera_3d.pitch + (targetPitch - camera_3d.pitch) * min(dt * smoothSpeed, 1)
     camera_3d.roll = camera_3d.roll + (targetRoll - camera_3d.roll) * min(dt * rollReturnSpeed, 1)
     targetRoll = targetRoll + (0 - targetRoll) * min(dt * rollReturnSpeed, 1)
     local inputX, inputZ = 0, 0
-    if love.keyboard.isDown("w") then inputZ = inputZ + 1 end
+    if love.keyboard.isDown("w") then inputZ = 1 end
     if love.keyboard.isDown("s") then inputZ = inputZ - 1 end
-    if love.keyboard.isDown("a") then inputX = inputX - 1 end
+    if love.keyboard.isDown("a") then inputX = -1 end
     if love.keyboard.isDown("d") then inputX = inputX + 1 end
-    if joystick.dy < -0.2 then inputZ = inputZ + 1 end
-    if joystick.dy >  0.2 then inputZ = inputZ - 1 end
-    if joystick.dx < -0.2 then inputX = inputX - 1 end
-    if joystick.dx >  0.2 then inputX = inputX + 1 end
-    local len = inputX*inputX + inputZ*inputZ
-    if len > 0 then
-        len = 1 / math.sqrt(len)
-        inputX, inputZ = inputX * len, inputZ * len
+    inputX = inputX + (joystick.active and joystick.dx or 0)
+    inputZ = inputZ + (joystick.active and -joystick.dy or 0)
+    local lenSq = inputX*inputX + inputZ*inputZ
+    if lenSq > 0 then
+        local invLen = 1 / sqrt(lenSq)
+        inputX, inputZ = inputX * invLen, inputZ * invLen
     end
 
     local accel = min(dt * 12, 1)
@@ -576,19 +576,19 @@ function william_update(dt)
 
     if abs(velX) > 0.01 or abs(velZ) > 0.01 then
         walkTime = walkTime + dt * 10
-        bobAmount = bobAmount + ((math.sin(walkTime) * 0.1) - bobAmount) * dt * 8
+        bobAmount = bobAmount + ((sin(walkTime) * 0.1) - bobAmount) * dt * 8
     else
         bobAmount = bobAmount - bobAmount * dt * 8
     end
     camera_3d.y = 5 + bobAmount
 
-    local sy, cy = math.sin(camera_3d.yaw), math.cos(camera_3d.yaw)
+    local sy, cy = sin(camera_3d.yaw), cos(camera_3d.yaw)
     camera_3d.x = camera_3d.x + (velX * cy - velZ * sy) * dt
     camera_3d.z = camera_3d.z + (velX * sy + velZ * cy) * dt
 
     local dx, dy, dz = camera_3d.x - chaser.x, camera_3d.y - chaser.y, camera_3d.z - chaser.z
     local distSq = dx*dx + dy*dy + dz*dz
-    local dist = math.sqrt(distSq)
+    local dist = sqrt(distSq)
 
     if demo_3d.state == "chasing" then
         if dist < stopDistance and not demo_3d.has_stopped_once then
@@ -602,9 +602,12 @@ function william_update(dt)
             local targetVx = dx / dist * chaser.speed * speedFactor
             local targetVy = dy / dist * chaser.speed * speedFactor
             local targetVz = dz / dist * chaser.speed * speedFactor
-            chaser.vx = (chaser.vx or 0) + (targetVx - (chaser.vx or 0)) * lerpAmt
-            chaser.vy = (chaser.vy or 0) + (targetVy - (chaser.vy or 0)) * lerpAmt
-            chaser.vz = (chaser.vz or 0) + (targetVz - (chaser.vz or 0)) * lerpAmt
+            local function lerpVec(current, target, amt)
+                return (current or 0) + (target - (current or 0)) * amt
+            end
+            chaser.vx = lerpVec(chaser.vx, targetVx, lerpAmt)
+            chaser.vy = lerpVec(chaser.vy, targetVy, lerpAmt)
+            chaser.vz = lerpVec(chaser.vz, targetVz, lerpAmt)
 
             chaser.x = chaser.x + chaser.vx * dt
             chaser.y = chaser.y + chaser.vy * dt
@@ -766,6 +769,7 @@ cheating_vis2 = false
 cheating_alpha = 0
 cheating_alpha2 = 0.7
 function cheating(dt)
+    sounds.egg:stop()
     local screen = sonic_demoexe_screen
     sounds.cr4sh_sound:stop()
     cheat_time = cheat_time + dt
@@ -839,18 +843,21 @@ function checkCollision(char, map, x, y)
     local camRight = floor(camera.x + base_width)
     local camBottom = floor(camera.y + base_height)
 
-    local halfW, halfH = char.width / 2, char.height / 2
+    local halfW, halfH = char.width * 0.5, char.height * 0.5
     local left, right = floor(x - halfW), floor(x + halfW - 1)
     local top, bottom = floor(y - halfH), floor(y + halfH - 1)
 
     left, right = max(left, camLeft), min(right, camRight)
     top, bottom = max(top, camTop), min(bottom, camBottom)
 
+    local w, h = map.width, map.height
+    local coll = map.collision
+
     for ty = top, bottom do
+        local tyIdx = ty * w
         for tx = left, right do
-            if tx >= 0 and tx < map.width and ty >= 0 and ty < map.height then
-                local idx = ty * map.width + tx + 1
-                if map.collision[idx] then return true end
+            if tx >= 0 and tx < w and ty >= 0 and ty < h then
+                if coll[tyIdx + tx + 1] then return true end
             end
         end
     end
@@ -859,15 +866,12 @@ function checkCollision(char, map, x, y)
 end
 
 function getGroundY(char, map, baseX, baseY)
-    local startY = floor(baseY + char.height / 2)
-    local endY = startY + MAX_STEP_HEIGHT
-    local camBottom = camera.y + base_height
-
-    endY = min(endY, camBottom)
+    local startY = floor(baseY + char.height * 0.5)
+    local endY = min(startY + MAX_STEP_HEIGHT, floor(camera.y + base_height))
 
     for y = startY, endY do
-        if checkCollision(char, map, baseX, y - char.height / 2) then
-            return y - char.height / 2
+        if checkCollision(char, map, baseX, y - char.height * 0.5) then
+            return y - char.height * 0.5
         end
     end
     return nil
@@ -875,29 +879,18 @@ end
 
 SNAP_SPEED = 300
 function snapToGround(char, map, dt)
-    if char.jumping then
-        char.grounded = false
-        return false
-    end
+    if char.jumping then char.grounded = false return false end
 
     local groundY = getGroundY(char, map, char.x, char.y)
-    if not groundY then
-        char.grounded = false
-        return false
-    end
+    if not groundY then char.grounded = false return false end
 
     local newY = approach(char.y, groundY, SNAP_SPEED * dt)
-    local distance = newY - groundY
-    if distance < 0 then distance = -distance end
-
+    local dist = abs(newY - groundY)
     char.y = newY
-    local grounded = distance < 1
+    local grounded = dist < 1
     char.grounded = grounded
 
-    if grounded and char.velocity.y > 0 then
-        char.velocity.y = 0
-    end
-
+    if grounded and char.velocity.y > 0 then char.velocity.y = 0 end
     return grounded
 end
 
@@ -907,20 +900,16 @@ function getGroundSlope(char, map, x, y)
     local yR = getGroundY(char, map, x + step, y)
 
     if yL and yR then
-        local dy = yR - yL
-        local dx = (step * 2)
-        return atan2(dy, dx)
+        return atan2(yR - yL, step * 2)
     end
     return 0
 end
 
 function applySlopePhysics(char, vx, vy, slopeAngle, dt)
-    local speed = vx
-    local sinA, cosA = math.sin(slopeAngle), math.cos(slopeAngle)
-    local vxs = speed * cosA
-    local vys = speed * sinA
+    local sinA, cosA = sin(slopeAngle), cos(slopeAngle)
+    local vxs = vx * cosA
+    local vys = vx * sinA
     vy = vy + 400 * dt
-
     return vxs, vy + vys
 end
 
@@ -1049,8 +1038,8 @@ function test_update(dt, char, map)
 
             if jump and grounded then
                 local slopeAngle = getGroundSlope(char, map, char.x, char.y)
-                vx = vx + JUMP_VELOCITY * math.sin(slopeAngle) * -1
-                vy = JUMP_VELOCITY * math.cos(slopeAngle) -50
+                vx = vx + JUMP_VELOCITY * sin(slopeAngle) * -1
+                vy = JUMP_VELOCITY * cos(slopeAngle) -50
                 char.jumping, char.grounded = true, false
             end
 
@@ -1736,6 +1725,10 @@ local function eggmanCrashThing(dt)
         return
     end
 
+    if crashing then
+        sounds.egg:stop()
+    end
+
     if not crashing2 then
         sounds.egg:stop()
         sonic_demoexe.currentSprite = sonic_demoexe.fly[1]
@@ -2153,8 +2146,8 @@ end
 function preloadTiles()
     updateProjectionConstants()
     local yaw, pitch = -camera_3d.yaw, -camera_3d.pitch
-    local cy, sy = math.cos(yaw), math.sin(yaw)
-    local cp, sp = math.cos(pitch), math.sin(pitch)
+    local cy, sy = cos(yaw), sin(yaw)
+    local cp, sp = cos(pitch), sin(pitch)
 
     local camX, camY, camZ = camera_3d.x, camera_3d.y, camera_3d.z
     local n = 0
@@ -2209,8 +2202,8 @@ end
 
 function draw_demo3d()
     updateProjectionConstants()
-    local cy, sy = math.cos(-camera_3d.yaw), math.sin(-camera_3d.yaw)
-    local cp, sp = math.cos(-camera_3d.pitch), math.sin(-camera_3d.pitch)
+    local cy, sy = cos(-camera_3d.yaw), sin(-camera_3d.yaw)
+    local cp, sp = cos(-camera_3d.pitch), sin(-camera_3d.pitch)
 
     local x, y, z = chaser.x - camera_3d.x, chaser.y - camera_3d.y, chaser.z - camera_3d.z
     local x1, z1 = x * cy - z * sy, x * sy + z * cy
@@ -2607,8 +2600,8 @@ function love.draw()
         end
         love.graphics.setColor(1,1,1)
         local t = love.timer.getTime()
-        love.graphics.print("Ready to be",125,50+math.sin(t*2)*2)
-        love.graphics.print("Tortured?",285,200+math.sin(t*2.2)*3)
+        love.graphics.print("Ready to be",125,50+sin(t*2)*2)
+        love.graphics.print("Tortured?",285,200+sin(t*2.2)*3)
     elseif gamestate == "william" then
         draw_william()
         drawStageTitle(DotTitle, DotCircles, stageActImg1)
@@ -2628,7 +2621,7 @@ function love.draw()
                 love.graphics.setFont(FontBig)
                 love.graphics.setColor(0.045,0.045,0.045,helloFade)
                 local text="HELLO WILLIAM."
-                love.graphics.print(text, base_width/2-FontBig:getWidth(text)/2, base_height/2-FontBig:getHeight()/2+math.sin(t*2.2)*3)
+                love.graphics.print(text, base_width/2-FontBig:getWidth(text)/2, base_height/2-FontBig:getHeight()/2+sin(t*2.2)*3)
             end
         elseif reboot_vis2 then
             love.graphics.setFont(FontBig)
@@ -2658,8 +2651,8 @@ function love.draw()
         love.graphics.setColor(1,1,1,cheating_alpha2)
         local t = love.timer.getTime()
         if cheating_vis2 then
-            love.graphics.print("How dare you cheat within my realm, my game.",40,50+math.sin(t*2.5)*3)
-            love.graphics.print("I won't let you escape from your fate that easily.",75,157+math.sin(t*2)*2)
+            love.graphics.print("How dare you cheat within my realm, my game.",40,50+sin(t*2.5)*3)
+            love.graphics.print("I won't let you escape from your fate that easily.",75,157+sin(t*2)*2)
         end
     elseif gamestate == "testmap" then
         love.graphics.push()
@@ -2812,7 +2805,7 @@ function updateJoystick(x, y)
     local len = dx * dx + dy * dy
     local maxDist = joystick.radius
     if len > maxDist * maxDist and len > 0 then
-        local scale = maxDist / math.sqrt(len)
+        local scale = maxDist / sqrt(len)
         dx, dy = dx * scale, dy * scale
     end
     joystick.dx, joystick.dy = dx / maxDist, dy / maxDist
