@@ -1,5 +1,5 @@
-local glrequire = require("ffi/opengl")
-glrequire.init()
+--local glrequire = require("ffi/opengl")
+--glrequire.init()
 local love = require("love")
 local fast = require("fast")
 fast.fpsCap = 60
@@ -250,6 +250,7 @@ local function createCharacter(opts)
         _coyote = 0,
         _jumpBuf = 0,
         _stuck_timer = 0,
+        canJump = true,
         physics_enabled = opts.physics_enabled or false
     }
 end
@@ -783,7 +784,7 @@ function cheating(dt)
         local grab = screen.grab
         updateSprite(dt * 1.35, grab, screen)
         if screen.spriteIndex > #grab then
-            screen.spriteIndex = #grab
+            screen.spriteIndex = 5
         end
 
     elseif cheat_time >= 13 then
@@ -840,26 +841,24 @@ function checkCollision(char, map, x, y)
     if type(map) == "string" then map = getMap(map) end
     if not map then return false end
 
-    local camLeft = floor(camera.x)
-    local camTop = floor(camera.y)
-    local camRight = floor(camera.x + base_width)
-    local camBottom = floor(camera.y + base_height)
+    local w, h = map.width, map.height
+    local coll = map.collision
 
     local halfW, halfH = char.width * 0.5, char.height * 0.5
     local left, right = floor(x - halfW), floor(x + halfW - 1)
     local top, bottom = floor(y - halfH), floor(y + halfH - 1)
-
-    left, right = max(left, camLeft), min(right, camRight)
-    top, bottom = max(top, camTop), min(bottom, camBottom)
-
-    local w, h = map.width, map.height
-    local coll = map.collision
+    if left < 0 or top < 0 or right >= w then
+        return true
+    end
+    if bottom >= h then
+        return false
+    end
 
     for ty = top, bottom do
         local tyIdx = ty * w
         for tx = left, right do
-            if tx >= 0 and tx < w and ty >= 0 and ty < h then
-                if coll[tyIdx + tx + 1] then return true end
+            if coll[tyIdx + tx + 1] then
+                return true
             end
         end
     end
@@ -868,8 +867,11 @@ function checkCollision(char, map, x, y)
 end
 
 function getGroundY(char, map, baseX, baseY)
+    if type(map) == "string" then map = getMap(map) end
+    if not map then return nil end
+
     local startY = floor(baseY + char.height * 0.5)
-    local endY = min(startY + MAX_STEP_HEIGHT, floor(camera.y + base_height))
+    local endY = min(startY + MAX_STEP_HEIGHT, map.height - 1)
 
     for y = startY, endY do
         if checkCollision(char, map, baseX, y - char.height * 0.5) then
@@ -972,6 +974,17 @@ function test_update(dt, char, map)
     snapToGround(char, map, dt)
     local grounded = char.grounded
 
+    if grounded then
+        local groundY = getGroundY(char, map, char.x, char.y)
+        if groundY then
+            char.y = groundY
+            char.velocity.y = 0
+            char.jumping = false
+        end
+    else
+        char.velocity.y = char.velocity.y + (char.jumping and 625 or 400) * dt
+    end
+
     char._coyote = grounded and COYOTE_TIME or max(0, char._coyote - dt)
     char._jumpBuf = jump and JUMP_BUFFER or max(0, char._jumpBuf - dt)
 
@@ -1025,24 +1038,17 @@ function test_update(dt, char, map)
                     char.angle, char.fakeAngle = 0, 0
                 end
             end
-            if (jump and grounded) or (char._jumpBuf > 0 and char._coyote > 0 and not char.jumping) then
-                vy = char.jumpHeight
-                char.jumping, char.grounded, char._jumpBuf, char.jumpHeldTime = true, false, 0, 0
-                if sounds and sounds.jump_sound then sounds.jump_sound:play() end
-            end
-
-            if (char._jumpBuf > 0 and char._coyote > 0 and not char.jumping) then
-                vy = char.jumpHeight
-                char.jumping, char.grounded = true, false
+            local canPerformJump = char.canJump and (grounded or (char._coyote > 0))
+            if jump and canPerformJump and not char.jumping then
+                char.jumping = true
+                char.grounded = false
                 char._jumpBuf = 0
-                if sounds and sounds.jump_sound then sounds.jump_sound:play() end
-            end
-
-            if jump and grounded then
+                char.jumpHeldTime = 0
                 local slopeAngle = getGroundSlope(char, map, char.x, char.y)
                 vx = vx + JUMP_VELOCITY * sin(slopeAngle) * -1
+                vy = char.jumpHeight or -310
                 vy = JUMP_VELOCITY * cos(slopeAngle) -50
-                char.jumping, char.grounded = true, false
+                if sounds and sounds.jump_sound then sounds.jump_sound:play() end
             end
 
             if char.jumping then
@@ -1123,7 +1129,7 @@ function test_update(dt, char, map)
     char.x = clamp(char.x, 15, mapWidth - 15)
     char.velocity.x, char.velocity.y = vx, vy
     if char ~= sonic_demoexe then
-        local fellOff = (char.y >= mapHeight + 40)
+        local fellOff = (char.y >= mapHeight + 40) or (char.y >= mapHeight - 5 and char.velocity.y == 0)
         updateGamestate(char, fellOff)
         updateCamera(dt, char, mapWidth, mapHeight)
     else
@@ -1162,6 +1168,25 @@ bossfightActive = false
 blackScreen = false
 blackTimer = 0
 
+local function keepDemoOnGround(demo, map)
+    if not map or not demo then return end
+    local groundY = getGroundY(demo, map, demo.x, demo.y)
+    if groundY then
+        if demo.y > groundY then
+            demo.y = groundY
+            demo.velocity.y = 0
+            demo.grounded = true
+            demo.jumping = false
+        end
+    else
+        if demo.y > map.height - demo.height then
+            demo.y = map.height - demo.height
+            demo.velocity.y = 0
+            demo.grounded = true
+        end
+    end
+end
+
 local function handleBounce(knuck, demo, dt, map)
     local overlapX = abs(knuck.x - demo.x) < (knuck.width + demo.width) / 2
     local overlapY = abs(knuck.y - demo.y) < (knuck.height + demo.height) / 2
@@ -1184,6 +1209,12 @@ local function handleBounce(knuck, demo, dt, map)
                     while checkCollision(demo, map, demo.x, demo.y) and safety < 32 do
                         demo.y = demo.y - 1
                         safety = safety + 1
+
+                        if demo.y > map.height - demo.height then
+                            demo.y = map.height - demo.height
+                            demo.velocity.y = 0
+                            demo.grounded = true
+                        end
                     end
                 end
             else
@@ -1207,6 +1238,12 @@ local function handleBounce(knuck, demo, dt, map)
                     while checkCollision(demo, map, demo.x, demo.y) and safety < 32 do
                         demo.y = demo.y - 1
                         safety = safety + 1
+
+                        if demo.y > map.height - demo.height then
+                            demo.y = map.height - demo.height
+                            demo.velocity.y = 0
+                            demo.grounded = true
+                        end
                     end
                     safety = 0
                     while checkCollision(knuck, map, knuck.x, knuck.y) and safety < 32 do
@@ -1307,6 +1344,7 @@ function knuck_up(dt)
             end
         end
         handleBounce(knuckles, demo, dt, "map2")
+        keepDemoOnGround(demo, map2)
 
         if demo.velocity.x < targetSpeed then
             demo.velocity.x = min(demo.velocity.x + demo_speed * dt, targetSpeed)
@@ -1396,6 +1434,7 @@ function hide_and_seek(dt)
         tails.velocity.x = 0
         tails.velocity.y = tails.velocity.y + gravity * dt
         test_update(dt, sonic_demoexe, "map1")
+        tails.canJump = false
 
         if tails.grounded then
             tails.currentSprite = tails.fall
@@ -1659,7 +1698,7 @@ local waiting = 0
 
 function updateGamestate(char, fellOff)
     local spawns = {
-        default = {x = 100, y = 630},
+        default = {x = 100, y = 625},
         eggman  = {x = 2894, y = 1255}
     }
     local spawn = (gamestate == "eggman") and spawns.eggman or spawns.default
