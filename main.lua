@@ -1,3 +1,5 @@
+local glrequire = require("ffi/opengl")
+glrequire.init()
 local love = require("love")
 local fast = require("fast")
 fast.fpsCap = 60
@@ -71,7 +73,7 @@ local startTime = os.time()
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "william"
+local gamestate = "warning"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -477,13 +479,13 @@ function love.load()
         print("no discord RPC")
     end
     credits = {
-        {name = "CopiluCuSarmale", role = "Director, Game Dev, Artist, Animator, Coder, Document, Composer", img = "copilucusarmale.png"},
+        {name = "CopiluCuSarmale", role = "Director, Pixel Artist, Artist, Animator, Coder, Document, Composer", img = "copilucusarmale.png"},
         {name = "Replayer", role = "Game Tester, Document, Sonic_DEMO.exe's laugh", img = "replayer.png"},
         {name = "Leon", role = "Document", img = "leon.png"},
         {name = "Saunter", role = "Coder, Composer", img = "saunter.png"},
         {name = "Trigavid", role = "Composer", img = "trigavid.png"},
         {name = "Irealism01", role = "Game tester (for mobile)", img = "irealism01.png"},
-        {name = "Riadlyn", role = "Composer", img = "riadlyn.png"},
+        {name = "Riadlyn", role = "Composer, Pixel Artist", img = "riadlyn.png"},
         {name = "SEGA", role = "Sonic, Tails, Knuckles, Eggman and mostly the rest", img = "sega.png"},
         {name = "RealDev", role = "the Sonic 1 Title Screen Font (Expanded)", img = "RealDev.png"}
     }
