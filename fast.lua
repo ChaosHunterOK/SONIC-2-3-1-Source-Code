@@ -68,10 +68,13 @@ function fast.getSound(path, stype)
     return pool[1]
 end
 
+local frames = {}
+local MAX_CACHED_FRAMES = 50
+local cacheOrder = {}
+
 function fast.getFrames(basePath, count)
     local cached = frames[basePath]
     if cached then return cached end
-
     local fr = {}
     if count then
         for i = 1, count do
@@ -87,6 +90,17 @@ function fast.getFrames(basePath, count)
         end
     end
     frames[basePath] = fr
+    table.insert(cacheOrder, basePath)
+    while #cacheOrder > MAX_CACHED_FRAMES do
+        local oldPath = table.remove(cacheOrder, 1)
+        if frames[oldPath] then
+            for i = 1, #frames[oldPath] do
+                frames[oldPath][i] = nil
+            end
+            frames[oldPath] = nil
+        end
+    end
+
     return fr
 end
 

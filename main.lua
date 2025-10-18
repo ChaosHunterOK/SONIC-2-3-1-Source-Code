@@ -170,7 +170,7 @@ local soundDefs = {
 local sounds = {}
 
 for name, path in pairs(soundDefs) do
-    sounds[name] = fast.getSound(path, (path:find("music") and "stream") or "static")
+    sounds[name] = fast.getSound(path, path:find("music") and "stream")
 end
 
 local images = {}
@@ -186,9 +186,25 @@ local mapFiles = {
     map3 = "images/maps/gh2.png",
     testmap2 = "images/maps/testmap.png"
 }
-
 local maps = {}
+local currentMapName = nil
+function unloadMap(name)
+    local map = maps[name]
+    if map then
+        if map.image and map.image.release then
+            map.image:release()
+        end
+        map.collision = nil
+        maps[name] = nil
+    end
+end
+
 function getMap(name)
+    if currentMapName and currentMapName ~= name then
+        unloadMap(currentMapName)
+    end
+    currentMapName = name
+
     local map = maps[name]
     if not map then
         map = loadMap(mapFiles[name])
@@ -210,9 +226,7 @@ function loadMap(path)
             i = i + 1
         end
     end
-
     imageData:release()
-
     return {
         image = img,
         collision = collision,
@@ -221,6 +235,7 @@ function loadMap(path)
     }
 end
 
+--setmetatable(maps, {__mode="v"})
 local function createCharacter(opts)
     opts = opts or {}
     return {
@@ -414,7 +429,7 @@ sonic_demoexe.fly_anim = loadFrames(spritesFolder .. "sonic_demo.exe/fly/anim/",
 sonic_demoexe.cr4sh = fast.getImage(spritesFolder.."sonic_demo.exe/fly/anim/cr4sh.png")
 sonic_demoexe = initCharacterSprite(sonic_demoexe, sonic_demoexe.idle)
 
-test_character = createCharacter{x = -100, y = -140, maxSpeed = 200 }
+test_character = createCharacter{x = 100, y = 50, maxSpeed = 200 }
 test_character.idle = fast.getImage(spritesFolder .. "sonic_demo.exe/idle.png")
 test_character.run = loadFrames(spritesFolder .. "sonic_demo.exe/run/", 4)
 test_character.walk = loadFrames(spritesFolder .. "sonic_demo.exe/walk/", 6)
@@ -674,10 +689,12 @@ local function updateSprite(dt, spriteTable, char, speed)
     if not char.spriteIndex then
         char.spriteIndex = 1
     end
+
     char.spriteIndex = char.spriteIndex + dt * (speed or 10)
     if char.spriteIndex >= #spriteTable + 1 then
         char.spriteIndex = 1
     end
+    char.currentSprite = nil
     char.currentSprite = spriteTable[floor(char.spriteIndex)] or spriteTable[1]
 end
 
@@ -1699,9 +1716,18 @@ local waiting = 0
 function updateGamestate(char, fellOff)
     local spawns = {
         default = {x = 100, y = 625},
-        eggman  = {x = 2894, y = 1255}
+        eggman  = {x = 3300, y = 50},
+        testmap = {x = 100, y = 65},
     }
-    local spawn = (gamestate == "eggman") and spawns.eggman or spawns.default
+    local spawn
+
+    if gamestate == "eggman" then
+        spawn = spawns.eggman
+    elseif gamestate == "testmap" then
+        spawn = spawns.testmap
+    else
+        spawn = spawns.default
+    end
     if gamestate ~= prevGamestate or fellOff then
         char.x, char.y = spawn.x, spawn.y
         char.velocity.x, char.velocity.y = 0, 0
@@ -1716,6 +1742,7 @@ function updateGamestate(char, fellOff)
         end
     end
 end
+
 sounds.hitStatic:setVolume(1.8)
 local stages = { test = true, hs = true, knuck = true, eggman = true, william = true }
 lastGamestate = nil
@@ -1802,7 +1829,28 @@ local function eggmanCrashThing(dt)
     elseif crashTimer >= 12 then
         gamestate, crashing2, crashAlpha = "cheating", false, 0
     end
+    releaseCharacter(knuckles)
+    releaseCharacter(s1)
 end
+
+function releaseCharacter(charName)
+    local char = _G[charName]
+    if not char then return end
+    if char.currentSprite then
+        if type(char.currentSprite) == "table" then
+            for _, img in ipairs(char.currentSprite) do
+                if img.release then img:release() end
+            end
+        elseif char.currentSprite.release then
+            char.currentSprite:release()
+        end
+    end
+    if char.walk then
+        for _, img in ipairs(char.walk) do if img.release then img:release() end end
+    end
+    _G[charName] = nil
+end
+
 local gamestateHandlers = {
     test = function(dt)
         test_update(dt, tails, "map")
@@ -1821,11 +1869,18 @@ local gamestateHandlers = {
                 gamestate = "selection"
             end
         end
+        zoomTimer = 0
+        zoomDuration = 2
     end,
     knuck = function(dt)
+        releaseCharacter(tails)
+        releaseCharacter(tail_tails)
+        releaseCharacter(fire_bg)
         test_update(dt, knuckles, "map2")
         knuck_up(dt)
         love.window.setTitle("SONIC 2 3 1")
+        zoomTimer = 0
+        zoomDuration = 2
     end,
     testmap = function(dt)
         test_update(dt, test_character, "testmap2")
@@ -1837,6 +1892,7 @@ local gamestateHandlers = {
         love.mouse.setRelativeMode(true)
     end,
     cheating = function(dt)
+        releaseCharacter(eggman)
         love.window.setTitle("")
         cheating(dt)
     end,
@@ -1937,7 +1993,7 @@ function love.update(dt)
         scrollY = max(0, min(scrollY, maxScroll))
 
         if love.keyboard.isDown("return") or jumpButton.active then
-            openURL(link)
+            love.system.openURL(link)
             love.event.quit()
         end
     elseif gamestate == "error" then
@@ -2040,29 +2096,26 @@ soundPlayed10 = false
 function selection()
     local winWidth, winHeight = base_width, base_height
     local mouseX, mouseY = love.mouse.getPosition()
+    local halfW, halfH = winWidth * 0.5, winHeight * 0.5
+    local offsetX = (mouseX - halfW) * 0.025
+    local offsetY = (mouseY - halfH) * 0.02
 
     love.graphics.push()
-    love.graphics.translate(winWidth/2, winHeight/2)
+    love.graphics.translate(halfW, halfH)
     love.graphics.scale(selectionScale, selectionScale)
-    love.graphics.translate(-winWidth/2, -winHeight/2)
+    love.graphics.translate(-halfW, -halfH)
     love.graphics.setColor(1, 1, 1, selectionAlpha)
 
-    local halfW, halfH = winWidth * 0.5, winHeight * 0.5
-    local offsetX2 = (mouseX - halfW) * 0.025
-    local offsetY2 = (mouseY - halfH) * 0.02
-
-    local spacing = 100
-    local baseX = halfW + offsetX2 + characterOffsetX
-    local centerY = halfH + offsetY2
-
-    love.graphics.draw(selectionImages.selection_box, halfW + offsetX2, centerY, 0, 1, 1,
-    selectionImages.selection_box:getWidth() * 0.5, selectionImages.selection_box:getHeight() * 0.5)
+    local baseX = halfW + offsetX + characterOffsetX
+    local centerY = halfH + offsetY
+    love.graphics.draw(selectionImages.selection_box,baseX,centerY,0,1, 1,selectionImages.selection_box:getWidth() * 0.5,selectionImages.selection_box:getHeight() * 0.5)
     local characters = {
         { alive = charStatus.tails_alive, lock = charStatus.tails_lock, img = selectionImages.tails_selection, dead = selectionImages.dead_tails },
         { alive = charStatus.knuckles_alive, lock = charStatus.knuckles_lock, img = selectionImages.knuck_selection, dead = selectionImages.dead_knuckles },
         { alive = charStatus.eggman_alive, lock = charStatus.eggman_lock, img = selectionImages.eggman_selection, dead = selectionImages.dead_eggman }
     }
 
+    local spacing = 100
     for i, char in ipairs(characters) do
         local isSelected = (i == selectionIndex)
         local xOffset = (i - selectionIndex) * spacing
@@ -2076,25 +2129,20 @@ function selection()
         love.graphics.setColor(1, 1, 1, alpha * selectionAlpha)
 
         if char.alive then
-            love.graphics.draw(char.img, drawX, drawY, 0, scale, scale, char.img:getWidth() * 0.5, char.img:getHeight() * 0.5)
+            love.graphics.draw(char.img,drawX,drawY,0,scale, scale,char.img:getWidth() * 0.5,char.img:getHeight() * 0.5)
             if not char.lock then
                 love.graphics.draw(lockImg, drawX - 10, drawY + 20, 0, scale, scale)
             end
         else
-            love.graphics.draw(char.dead, drawX, drawY, 0, scale, scale, char.dead:getWidth() * 0.5, char.dead:getHeight() * 0.5)
+            love.graphics.draw(char.dead,drawX,drawY,0,scale, scale,char.dead:getWidth() * 0.5,char.dead:getHeight() * 0.5)
         end
     end
-
     local arrowY = centerY - 25
     local leftActive = love.keyboard.isDown("left") or joystick.dx < -0.5
     local rightActive = love.keyboard.isDown("right") or joystick.dx > 0.5
 
     local function drawArrow(active, x, y, flipX)
-        if active then
-            love.graphics.setColor(0.5, 0.5, 0.5, selectionAlpha)
-        else
-            love.graphics.setColor(1, 1, 1, selectionAlpha)
-        end
+        love.graphics.setColor(active and {0.5, 0.5, 0.5, selectionAlpha} or {1, 1, 1, selectionAlpha})
         love.graphics.draw(warrowImage, x, y, 0, flipX, 1)
     end
 
@@ -2146,31 +2194,6 @@ function linear(a, b, t)
     t = tonumber(t) or 0
     t = max(0, min(1, t))
     return a + (b - a) * t
-end
-
-function openURL(url)
-    local osType = love.system.getOS()
-    local command
-
-    if osType == "Windows" then
-        command = 'start "" "' .. url .. '"'
-    elseif osType == "OS X" then
-        command = 'open "' .. url .. '"'
-    else
-        command = 'xdg-open "' .. url .. '"'
-    end
-
-    local result, exitType, exitCode = os.execute(command)
-    local success = false
-    if type(result) == "number" then
-        success = result == 0
-    elseif type(result) == "boolean" then
-        success = result
-    end
-
-    if not success then
-        print("Failed to open URL:", url)
-    end
 end
 
 preloadedTiles = {}
@@ -2846,7 +2869,7 @@ function updateJoystick(x, y)
     local len = dx * dx + dy * dy
     local maxDist = joystick.radius
     if len > maxDist * maxDist and len > 0 then
-        local scale = maxDist / sqrt(len)
+        local scale = maxDist / math.sqrt(len)
         dx, dy = dx * scale, dy * scale
     end
     joystick.dx, joystick.dy = dx / maxDist, dy / maxDist
@@ -2866,6 +2889,7 @@ function love.touchpressed(id, x, y)
         end
         return
     end
+
     if not cameraTouchID and gamestate == "william" then
         cameraTouchID = id
         lastTouchX, lastTouchY = x, y
@@ -2885,8 +2909,8 @@ function love.touchmoved(id, x, y)
     elseif id == cameraTouchID and gamestate == "william" then
         local dx, dy = x - lastTouchX, y - lastTouchY
         targetYaw   = targetYaw - dx * mouseSensitivity
-        targetPitch = max(-math.pi*0.5, min(math.pi*0.5, targetPitch + dy * mouseSensitivity))
-        targetRoll  = max(-0.15, min(0.15, -dx * rollStrength))
+        targetPitch = math.max(-math.pi*0.5, math.min(math.pi*0.5, targetPitch + dy * mouseSensitivity))
+        targetRoll  = math.max(-0.15, math.min(0.15, -dx * rollStrength))
         lastTouchX, lastTouchY = x, y
     end
 end
@@ -2902,12 +2926,14 @@ function love.touchreleased(id, x, y)
     elseif id == cameraTouchID and gamestate == "william" then
         cameraTouchID, lastTouchX, lastTouchY = nil, nil, nil
     end
+    local rightSideTouch = false
     for _, t in pairs(touches) do
         if t.x and t.x > base_width * 0.5 then
-            return
+            rightSideTouch = true
+            break
         end
     end
-    jumpButton.active = false
+    jumpButton.active = rightSideTouch
 end
 
 function sign(x)
