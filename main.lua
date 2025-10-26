@@ -1,8 +1,6 @@
---local glrequire = require("ffi/opengl")
---glrequire.init()
 local love = require("love")
 local fast = require("fast")
-fast.fpsCap = 60
+fast.fpsCap = 64
 
 local buttons = {"Copy", "Quit"}
 local selected = 1
@@ -47,13 +45,12 @@ function love.errhand(msg)
         love.graphics.setColor(1,1,1)
 
         if image then
-            local scaleX = screenW / image:getWidth()
-            local scaleY = screenH / image:getHeight()
+            local scaleX, scaleY = screenW / image:getWidth(), screenH / image:getHeight()
             love.graphics.draw(image, 0, 0, 0, scaleX, scaleY)
         end
 
         love.graphics.printf(errorMessage, xOffset, 100, screenW - xOffset - 50, "left")
-        love.graphics.printf("DM copilucusarmale or saunter_thesequel on Discord to report this goofy error", xOffset, 35, screenW - xOffset - 50, "left")
+        love.graphics.printf("DM copilucusarmale or saunter_thesequel on Discord to report this goofy error", xOffset, 30, screenW - xOffset - 50, "left")
 
         local btnX = xOffset
         for i, btn in ipairs(buttons) do
@@ -73,7 +70,7 @@ local startTime = os.time()
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "warning"
+local gamestate = "eggman"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -93,9 +90,7 @@ local moveSpeed, mouseSensitivity = 8, 0.002
 local walkTime = 0
 
 local canvas
-scale_factor = 1
-offset_x = 0
-offset_y = 0
+scale_factor, offset_x, offset_y = 1, 0, 0
 resizeFreezeTimer = 0
 
 rebooting_Vis, rebootingTimer, lastPlayedCycle = false, 0, -1
@@ -114,9 +109,9 @@ local charStatus = {
     eggman_lock = false
 }
 
-local idk_img = fast.getImage("images/idk.png")
-local bush_img = fast.getImage("images/bush.png")
-local egg_mob = fast.getImage("images/egg_mob.png")
+idk_img = fast.getImage("images/idk.png")
+bush_img = fast.getImage("images/bush.png")
+egg_mob = fast.getImage("images/egg_mob.png")
 
 jumpscare = fast.getImage("images/jump.png")
 knuck_bg = fast.getImage("images/background/knuck.png")
@@ -132,13 +127,41 @@ local selectionImages = {
     dead_eggman = fast.getImage("images/selection/dead_eggman.png")
 }
 
-local mapImages = {
-    test2 = fast.getImage("images/maps/test2.png"),
-    test3 = fast.getImage("images/maps/map1.png"),
-    knuck1 = fast.getImage("images/maps/knuck1.png"),
-    gh1 = fast.getImage("images/maps/gh1.png"),
-    testmap = fast.getImage("images/maps/testmap.png")
+local mapImages = {}
+local mapPaths = {
+    test2 = "images/maps/test2.png",
+    test3 = "images/maps/map1.png",
+    knuck1 = "images/maps/knuck1.png",
+    gh1 = "images/maps/gh1.png",
+    testmap = "images/maps/testmap.png"
 }
+function loadMapImage(name)
+    if mapImages[name] then return mapImages[name] end
+
+    local path = mapPaths[name]
+    if not love.filesystem.getInfo(path) then return nil end
+    local imgData = love.image.newImageData(path)
+    local w, h = imgData:getWidth(), imgData:getHeight()
+    local hasPixels = false
+
+    for y = 0, h - 1 do
+        for x = 0, w - 1 do
+            local _, _, _, a = imgData:getPixel(x, y)
+            if a > 0.01 then
+                hasPixels = true
+                break
+            end
+        end
+        if hasPixels then break end
+    end
+
+    if hasPixels then
+        mapImages[name] = love.graphics.newImage(imgData)
+    end
+
+    imgData:release()
+    return mapImages[name]
+end
 
 lockImg = fast.getImage("images/lock.png")
 
@@ -178,64 +201,102 @@ local quads = {}
 selectionState = "tails"
 selectionIndex = 1
 selectionOptions = {"tails", "knuckles", "eggman"}
-
-local mapFiles = {
-    map = "images/maps/test.png",
-    map1 = "images/maps/map2.png",
-    map2 = "images/maps/knuck2.png",
-    map3 = "images/maps/gh2.png",
-    testmap2 = "images/maps/testmap.png"
+local mapFolders = {
+    map = {width = 11264, height = 1024},
+    map1 = {width = 11392, height = 1280},
+    map2 = {width = 6501, height = 1233},
+    map3 = {width = 4052, height = 1009},
+    testmap2 = {width = 1952, height = 696}
 }
+
 local maps = {}
 local currentMapName = nil
+
 function unloadMap(name)
     local map = maps[name]
     if map then
-        if map.image and map.image.release then
-            map.image:release()
+        if map.tiles then
+            for _, tile in ipairs(map.tiles) do
+                tile.image:release()
+                tile.image = nil
+            end
         end
         map.collision = nil
         maps[name] = nil
+        collectgarbage("collect")
     end
 end
 
 function getMap(name)
     if currentMapName and currentMapName ~= name then
-        unloadMap(currentMapName)
+        --unloadMap(currentMapName)
     end
     currentMapName = name
 
     local map = maps[name]
     if not map then
-        map = loadMap(mapFiles[name])
+        map = loadMap(name)
         maps[name] = map
     end
     return map
 end
 
-function loadMap(path)
-    local img = fast.getImage(path)
-    local imageData = love.image.newImageData(path)
-    local w, h = imageData:getDimensions()
-    local collision = {}
-    local i = 1
-    for y = 0, h - 1 do
-        for x = 0, w - 1 do
-            local _, _, _, a = imageData:getPixel(x, y)
-            collision[i] = (a > 0.1)
-            i = i + 1
-        end
+function loadMap(name)
+    local folderInfo = mapFolders[name]
+    if not folderInfo then
+        error("No folder info for map: " .. tostring(name))
     end
-    imageData:release()
+
+    local tiles = {}
+    local w, h = folderInfo.width, folderInfo.height
+    local collision = {}
+    local xPos, yPos = 0, 0
+    local rowHeight = 0
+    local i = 1
+
+    while true do
+        local path = string.format("images/maps/%s/tile%d.png", name, i)
+        if not love.filesystem.getInfo(path) then break end
+        local imgData = love.image.newImageData(path)
+        local tw, th = imgData:getWidth(), imgData:getHeight()
+
+        local hasPixels = false
+        for ty = 0, th - 1 do
+            for tx = 0, tw - 1 do
+                local _, _, _, a = imgData:getPixel(tx, ty)
+                if a > 0.01 then
+                    hasPixels = true
+                    local mapX = xPos + tx
+                    local mapY = yPos + ty
+                    collision[mapY * w + mapX + 1] = true
+                end
+            end
+        end
+
+        imgData:release()
+
+        if hasPixels then
+            table.insert(tiles, {path = path, x = xPos, y = yPos, w = tw, h = th, image = nil})
+        end
+
+        xPos = xPos + tw
+        if th > rowHeight then rowHeight = th end
+        if xPos >= w then
+            xPos = 0
+            yPos = yPos + rowHeight
+            rowHeight = 0
+        end
+        i = i + 1
+    end
+
     return {
-        image = img,
+        tiles = tiles,
         collision = collision,
         width = w,
         height = h
     }
 end
 
---setmetatable(maps, {__mode="v"})
 local function createCharacter(opts)
     opts = opts or {}
     return {
@@ -249,7 +310,7 @@ local function createCharacter(opts)
         jumping = opts.jumping or false,
         direction = 1,
         jumpHeight = -375,
-        acceleration = 100,
+        acceleration = 135,
         maxSpeed = opts.maxSpeed or 175,
         friction = 2,
         onGroundY = 0,
@@ -266,36 +327,25 @@ local function createCharacter(opts)
         _jumpBuf = 0,
         _stuck_timer = 0,
         canJump = true,
+        hasJumpedOnCatch = false,
         physics_enabled = opts.physics_enabled or false
     }
 end
+
+local showDebug = false
 
 local function loadFrames(basePath, count)
     return fast.getFrames(basePath, count)
 end
 
-local chunkSize, renderDistance = 4, 24
-warrowImage = fast.getImage("images/arrows/w.png")
+local chunkSize, renderDistance = 4, 22
 
 flashAlpha, flashDuration, flashTimer = 0, 0.5, 0
 local isFlashing = false
-local function initCharacterSprite(character, defaultSprite)
-    character.currentSprite = defaultSprite
-    character.spriteIndex = 1
-    return character
-end
-
-local function initArraySprite(character, spriteArray)
-    character.spriteIndex = 1
-    character.currentSprite = spriteArray[1]
-    return character
-end
 
 function flashScreen(duration)
-    flashAlpha = 1
-    flashDuration = duration or 0.5
-    flashTimer = flashDuration
-    isFlashing = true
+    flashAlpha, flashTimer = 1, duration or 0.5
+    flashDuration, isFlashing = flashTimer, true
 end
 
 transitionAlpha, transitioning, transitionTarget, transitionSpeed = 1, false, "", 1.5
@@ -307,16 +357,28 @@ function startTransition(target)
     colorLerp = 0
 end
 
-stage1 = fast.getImage(spritesFolder.."sonic_demo.exe/anim/knuckles/stage1.png")
-stage1_vis = true
-s1 = createCharacter{x = 100, y = 50}
-s1.stage2 = loadFrames(spritesFolder .. "sonic_demo.exe/anim/knuckles/stage2/", 2)
-stage2_vis = true
-stage3 = fast.getImage(spritesFolder.."sonic_demo.exe/anim/knuckles/stage3.png")
-stage3_vis = true
+function initSprite(character, spriteFrames)
+    character.spriteIndex = 1
+    if type(spriteFrames) == "table" then
+        character.currentSprite = spriteFrames[1]
+    else
+        character.currentSprite = spriteFrames
+    end
+    return character
+end
 
-local tail_tails = {}
-tail_tails.idle = loadFrames(spritesFolder .. "tail/", 5)
+function loadCharacterSprites(folder, def)
+    local c = createCharacter(def)
+    for name, data in pairs(def.sprites) do
+        local path = folder .. name
+        if data.count then
+            c[name] = fast.getFrames(path .. "/", data.count)
+        else
+            c[name] = fast.getImage(path .. ".png")
+        end
+    end
+    return initSprite(c, c.idle or c.walk or c.run)
+end
 
 menuShrink = 1
 local menuAlpha = 1
@@ -363,10 +425,7 @@ local function createBaseplate(width, depth)
 
     return tiles
 end
-
-local credits_text = {}
 local SCALE = 2
-
 local touches = {}
 
 local joystick = {
@@ -383,67 +442,83 @@ local jumpButton = {
     active = false
 }
 
-joystickBaseImage = fast.getImage("images/mobile_stuff/base.png")
-joystickKnobImage = fast.getImage("images/mobile_stuff/knob.png")
-jumpButtonImage = fast.getImage("images/mobile_stuff/jump.png")
+uiAssets = {
+    joystickBase = fast.getImage("images/mobile_stuff/base.png"),
+    joystickKnob = fast.getImage("images/mobile_stuff/knob.png"),
+    jumpButton = fast.getImage("images/mobile_stuff/jump.png"),
+    warrow = fast.getImage("images/arrows/w.png"),
+}
 
-local tails = createCharacter{ x = 100, y = 50, maxSpeed = 200 }
-tails.idle = fast.getImage(spritesFolder .. "tails/idle.png")
-tails.down = fast.getImage(spritesFolder .. "tails/down.png")
-tails.fall = fast.getImage(spritesFolder .. "tails/fall.png")
-tails.up = fast.getImage(spritesFolder .. "tails/up.png")
-tails.walk = loadFrames(spritesFolder .. "tails/walking/", 8)
-tails.jump = loadFrames(spritesFolder .. "tails/jump/", 3)
-tails.run = loadFrames(spritesFolder .. "tails/run/", 2)
-tails.damage = loadFrames(spritesFolder .. "tails/damage/", 2)
-tails = initCharacterSprite(tails, tails.idle)
+local tails = loadCharacterSprites(spritesFolder .. "tails/", {
+    x = 100, y = 50, maxSpeed = 200,
+    sprites = {
+        idle = {}, down = {}, fall = {}, up = {},
+        walk = {count = 8}, jump = {count = 3},
+        run = {count = 2}, damage = {count = 2}
+    }
+})
 
-local knuckles = createCharacter{ x = 100, y = 50, maxSpeed = 200 }
-knuckles.idle = fast.getImage(spritesFolder .. "knuckles/idle.png")
-knuckles.walk = loadFrames(spritesFolder .. "knuckles/walking/", 7)
-knuckles.run = loadFrames(spritesFolder .. "knuckles/run/", 4)
-knuckles.jump = loadFrames(spritesFolder .. "knuckles/jump/", 5)
-knuckles = initCharacterSprite(knuckles, knuckles.idle)
+local knuckles = loadCharacterSprites(spritesFolder .. "knuckles/", {
+    x = 100, y = 50, maxSpeed = 200,
+    sprites = {
+        idle = {}, walk = {count = 7}, run = {count = 4}, jump = {count = 5}
+    }
+})
 
-local eggman = createCharacter{ x = 3300, y = 50, maxSpeed = 140 }
-eggman.idle = fast.getImage(spritesFolder .. "eggman/idle.png")
-eggman.down = fast.getImage(spritesFolder .. "eggman/down.png")
-eggman.walk = loadFrames(spritesFolder .. "eggman/walking/", 3)
-eggman.run = loadFrames(spritesFolder .. "eggman/walking/", 3)
-eggman.jump = loadFrames(spritesFolder .. "eggman/walking/", 1)
-eggman.crashed = fast.getImage(spritesFolder.."eggman/crashed.png")
-eggman = initCharacterSprite(eggman, eggman.idle)
+local eggman = loadCharacterSprites(spritesFolder .. "eggman/", {
+    x = 3300, y = 50, maxSpeed = 140,
+    sprites = {
+        idle = {}, down = {}, walk = {count = 3}, run = {count = 3},
+        jump = {count = 1}, crashed = {}
+    }
+})
 
-local sonic_demoexe = createCharacter{x = -100, y = -140 }
-sonic_demoexe.idle = fast.getImage(spritesFolder .. "sonic_demo.exe/idle.png")
-sonic_demoexe.crouch = fast.getImage(spritesFolder .. "sonic_demo.exe/crouch.png")
-sonic_demoexe.anim_tails = loadFrames(spritesFolder .. "sonic_demo.exe/anim/tails/", 8)
-sonic_demoexe.float = loadFrames(spritesFolder .. "sonic_demo.exe/float/", 2)
-sonic_demoexe.jump = loadFrames(spritesFolder .. "sonic_demo.exe/jump/", 5)
-sonic_demoexe.run = loadFrames(spritesFolder .. "sonic_demo.exe/run/", 4)
-sonic_demoexe.walk = loadFrames(spritesFolder .. "sonic_demo.exe/walk/", 6)
-sonic_demoexe.fly = loadFrames(spritesFolder .. "sonic_demo.exe/fly/fly", 2)
-sonic_demoexe.fall = loadFrames(spritesFolder .. "sonic_demo.exe/fall/", 2)
-sonic_demoexe.kill_tails = loadFrames(spritesFolder .. "sonic_demo.exe/kill/test/", 7)
-sonic_demoexe.fly_anim = loadFrames(spritesFolder .. "sonic_demo.exe/fly/anim/", 3)
-sonic_demoexe.cr4sh = fast.getImage(spritesFolder.."sonic_demo.exe/fly/anim/cr4sh.png")
-sonic_demoexe = initCharacterSprite(sonic_demoexe, sonic_demoexe.idle)
+local sonic_demoexe = loadCharacterSprites(spritesFolder .. "sonic_demo.exe/", {
+    x = -100, y = -140,
+    sprites = {
+        idle = {}, crouch = {},
+        anim_tails = {count = 8}, float = {count = 2},
+        jump = {count = 5}, run = {count = 4}, walk = {count = 6},
+        fly = {count = 2}, fall = {count = 2}, kill_tails = {count = 7},
+        fly_anim = {count = 3}, cr4sh = {}
+    }
+})
 
-test_character = createCharacter{x = 100, y = 50, maxSpeed = 200 }
-test_character.idle = fast.getImage(spritesFolder .. "sonic_demo.exe/idle.png")
-test_character.run = loadFrames(spritesFolder .. "sonic_demo.exe/run/", 4)
-test_character.walk = loadFrames(spritesFolder .. "sonic_demo.exe/walk/", 6)
-test_character.jump = loadFrames(spritesFolder .. "sonic_demo.exe/jump/", 5)
-test_character = initCharacterSprite(test_character, test_character.idle)
+test_character = loadCharacterSprites(spritesFolder .. "sonic_demo.exe/", {
+    x = 50, y = 50,
+    sprites = {
+        idle = {}, crouch = {},
+        anim_tails = {count = 8}, float = {count = 2},
+        jump = {count = 5}, run = {count = 4}, walk = {count = 6},
+        fly = {count = 2}, fall = {count = 2}, kill_tails = {count = 7},
+        fly_anim = {count = 3}, cr4sh = {}
+    }
+})
 
-local sonic_demoexe_screen = createCharacter{x = 0, y = 355}
-sonic_demoexe_screen.idle = fast.getImage(spritesFolder .. "screen/idle_new.png")
-sonic_demoexe_screen.grab = loadFrames(spritesFolder .. "screen/grab/", 5)
-sonic_demoexe_screen = initCharacterSprite(sonic_demoexe_screen, sonic_demoexe_screen.idle)
+local sonic_demoexe_screen = loadCharacterSprites(spritesFolder .. "screen/", {
+    x = 0, y = 0,
+    sprites = {
+        grab = {count = 5}, idle = {}
+    }
+})
 
-local fire_bg = initCharacterSprite(fire_bg, fire_bg.idle)
-local tail_tails = initArraySprite(tail_tails, tail_tails.idle)
-local s1 = initArraySprite(s1, s1.stage2)
+s1 = loadCharacterSprites(spritesFolder .. "sonic_demo.exe/anim/knuckles/", {
+    x = 100, y = 50,
+    sprites = {
+        idle = {}, stage2 = {count = 2}, stage3 = {},
+    }
+})
+stage1_vis = true
+stage2_vis = true
+stage3_vis = true
+
+local tail_tails = {}
+tail_tails.image = fast.getImage(spritesFolder .. "tail/1.png")
+tail_tails.idle = loadFrames(spritesFolder .. "tail/", 5)
+
+local fire_bg = initSprite(fire_bg, fire_bg.idle)
+local tail_tails = initSprite(tail_tails, tail_tails.idle)
+local s1 = initSprite(s1, s1.stage2)
 
 local demo_3d = {
     chase_img = fast.getImage(spritesFolder.."demo/chase.png"),
@@ -471,6 +546,7 @@ function love.load()
     fast.fpsCap = 64
     love.window.setTitle("SONIC 2 3 1")
     love.window.setIcon(love.image.newImageData("images/game_icon.png"))
+    if canvas then canvas:release() end
     canvas = love.graphics.newCanvas(base_width, base_height)
     updateCanvasScale()
 
@@ -534,18 +610,7 @@ function love.load()
     }
 
     startTime = love.timer.getTime()
-    freezeScreen = false
-
     baseplateTiles = createBaseplate(thing, thing)
-
-    local file_content = love.filesystem.read("credits.txt")
-    if file_content then
-        for line in file_content:gmatch("[^\n]+") do
-            table.insert(credits_text, line)
-        end
-    else
-        table.insert(credits_text, "No credits file")
-    end
     credits_y = base_height
 end
 
@@ -705,6 +770,14 @@ local sonic_demoexe_wait_timer = 0
 local currentColor = {1, 1, 1}
 local lerpSpeed = 5
 
+menu3 = fast.getImage("images/background/menu3.png")
+
+local MenuImagesDamn = {}
+MenuImagesDamn[1] = fast.getImage("images/background/screen/1.png")
+MenuImagesDamn[2] = fast.getImage("images/background/screen/2.png")
+MenuImagesDamn[3] = fast.getImage("images/background/screen/3.png")
+MenuImagesDamn[4] = fast.getImage("images/background/screen/4.png")
+
 function before_idk(dt)
     local tX = tails.x
     local anim = sonic_demoexe.anim_tails
@@ -761,7 +834,6 @@ function before_idk(dt)
 end
 
 tort_visible = false
-tort_visible2 = false
 tort_time = 0
 local soundPlayed = false
 local soundPlayed2 = false
@@ -803,7 +875,6 @@ function cheating(dt)
         if screen.spriteIndex > #grab then
             screen.spriteIndex = 5
         end
-
     elseif cheat_time >= 13 then
         if cheating_alpha2 > 0 then
             cheating_alpha2 = max(0, cheating_alpha2 - 0.1 * dt)
@@ -829,16 +900,33 @@ local fadeDuration = 0.25
 local JOYSTICK_MOVE_THRESHOLD = 0.25
 local JOYSTICK_LOOK_THRESHOLD = 0.35
 
+local activeGamepad = nil
+function love.joystickadded(j)
+    activeGamepad = j
+end
+function love.joystickremoved(j)
+    if activeGamepad == j then activeGamepad = nil end
+end
+
 function getControls()
     local jdx = joystick.active and (joystick.dx or 0) or 0
     local jdy = joystick.active and (joystick.dy or 0) or 0
+    local gdx, gdy = 0, 0
+    local gjump, glookUp, glookDown = false, false, false
 
-    local moveRight = love.keyboard.isDown("right") or jdx > JOYSTICK_MOVE_THRESHOLD
-    local moveLeft = love.keyboard.isDown("left") or jdx < -JOYSTICK_MOVE_THRESHOLD
-    local jump  = love.keyboard.isDown("space") or love.keyboard.isDown("a") or jumpButton.active
+    if activeGamepad then
+        gdx = activeGamepad:getAxis(1) or 0
+        gdy = activeGamepad:getAxis(2) or 0
+        gjump = activeGamepad:isDown(1) or activeGamepad:isDown(2)
+        glookUp = gdy < -JOYSTICK_LOOK_THRESHOLD
+        glookDown = gdy > JOYSTICK_LOOK_THRESHOLD
+    end
+    local moveRight = love.keyboard.isDown("right") or jdx > JOYSTICK_MOVE_THRESHOLD or gdx > JOYSTICK_MOVE_THRESHOLD
+    local moveLeft = love.keyboard.isDown("left")  or jdx < -JOYSTICK_MOVE_THRESHOLD or gdx < -JOYSTICK_MOVE_THRESHOLD
+    local jump = love.keyboard.isDown("space") or love.keyboard.isDown("a") or love.keyboard.isDown("z") or jumpButton.active or gjump
 
-    local lookUp = (love.keyboard.isDown("up") or jdy < -JOYSTICK_LOOK_THRESHOLD) and not jump and not moveRight and not moveLeft
-    local lookDown = (love.keyboard.isDown("down") or jdy >  JOYSTICK_LOOK_THRESHOLD) and not jump and not moveRight and not moveLeft
+    local lookUp = (love.keyboard.isDown("up") or jdy < -JOYSTICK_LOOK_THRESHOLD or glookUp) and not jump and not moveRight and not moveLeft
+    local lookDown = (love.keyboard.isDown("down") or jdy > JOYSTICK_LOOK_THRESHOLD or glookDown) and not jump and not moveRight and not moveLeft
 
     return moveRight, moveLeft, jump, lookUp, lookDown
 end
@@ -849,8 +937,9 @@ JUMP_VELOCITY, JUMP_HOLD_TIME, COYOTE_TIME, JUMP_BUFFER = -310, 0.18, 0.10, 0.10
 AIR_DRAG, MAX_STEP_HEIGHT = 0.99609375, 10
 
 function approach(v, target, amt)
-    if v < target then return min(v + amt, target)
-    elseif v > target then return max(v - amt, target) end
+    if v < target then return math.min(v + amt, target)
+    elseif v > target then return math.max(v - amt, target)
+    end
     return v
 end
 
@@ -885,8 +974,7 @@ end
 
 function getGroundY(char, map, baseX, baseY)
     if type(map) == "string" then map = getMap(map) end
-    if not map then return nil end
-
+    if not map or not map.collision then return nil end
     local startY = floor(baseY + char.height * 0.5)
     local endY = min(startY + MAX_STEP_HEIGHT, map.height - 1)
 
@@ -901,16 +989,14 @@ end
 SNAP_SPEED = 300
 function snapToGround(char, map, dt)
     if char.jumping then char.grounded = false return false end
-
     local groundY = getGroundY(char, map, char.x, char.y)
     if not groundY then char.grounded = false return false end
 
     local newY = approach(char.y, groundY, SNAP_SPEED * dt)
-    local dist = abs(newY - groundY)
+    local dist = math.abs(newY - groundY)
     char.y = newY
     local grounded = dist < 1
     char.grounded = grounded
-
     if grounded and char.velocity.y > 0 then char.velocity.y = 0 end
     return grounded
 end
@@ -919,9 +1005,8 @@ function getGroundSlope(char, map, x, y)
     local step = 2
     local yL = getGroundY(char, map, x - step, y)
     local yR = getGroundY(char, map, x + step, y)
-
     if yL and yR then
-        return atan2(yR - yL, step * 2)
+        return atan2(yR - yL, (step * 2))
     end
     return 0
 end
@@ -930,7 +1015,7 @@ function applySlopePhysics(char, vx, vy, slopeAngle, dt)
     local sinA, cosA = sin(slopeAngle), cos(slopeAngle)
     local vxs = vx * cosA
     local vys = vx * sinA
-    vy = vy + 400 * dt
+    vy = vy + (gravity or 400) * dt
     return vxs, vy + vys
 end
 
@@ -953,10 +1038,13 @@ end
 
 local tails_caught = false
 local tails_caught2 = false
-
+function sign(x) return (x>0 and 1) or (x<0 and -1) or 0 end
+bgOffsetX = 0
+bgScrollSpeed = 0.15
 function test_update(dt, char, map)
     local mapObj = getMap(map)
     if not mapObj then return end
+
     local mapWidth, mapHeight = mapObj.width or 2000, mapObj.height or 1080
     char.velocity = char.velocity or {x = 0, y = 0}
     char.jumping = char.jumping or false
@@ -964,29 +1052,25 @@ function test_update(dt, char, map)
     char._coyote = char._coyote or 0
     char._jumpBuf = char._jumpBuf or 0
     char.jumpHeldTime = char.jumpHeldTime or 0
-
     char._stuck_timer = char._stuck_timer or 0
+
     if gamestate ~= char._last_gamestate and char ~= sonic_demoexe then
         char._stuck_timer = 0.15
         char._last_gamestate = gamestate
     end
-    if char._stuck_timer and char._stuck_timer > 0 and char ~= sonic_demoexe then
+    if char._stuck_timer > 0 and char ~= sonic_demoexe then
         char._stuck_timer = char._stuck_timer - dt
-        char.velocity.x = 0
-        char.velocity.y = 0
+        char.velocity.x, char.velocity.y = 0, 0
         char.currentSprite = char.idle
         return
     end
 
     local vx, vy = char.velocity.x, char.velocity.y
-
     local moveRight, moveLeft, jump, lookUp, lookDown = getControls()
     local inputDir = quantize((moveRight and 1 or 0) - (moveLeft and 1 or 0))
     local isDemoWithPhysics = (char == sonic_demoexe) and (sonic_demoexe.physics_enabled == true)
 
-    if tail_tails and tail_tails.idle then
-        updateSprite(dt * 0.5, tail_tails.idle, tail_tails)
-    end
+    if tail_tails and tail_tails.idle then updateSprite(dt * 0.5, tail_tails.idle, tail_tails)end
 
     snapToGround(char, map, dt)
     local grounded = char.grounded
@@ -994,12 +1078,11 @@ function test_update(dt, char, map)
     if grounded then
         local groundY = getGroundY(char, map, char.x, char.y)
         if groundY then
-            char.y = groundY
-            char.velocity.y = 0
+            char.y, vy = groundY, 0
             char.jumping = false
         end
     else
-        char.velocity.y = char.velocity.y + (char.jumping and 625 or 400) * dt
+        vy = vy + (char.jumping and 625 or 400) * dt
     end
 
     char._coyote = grounded and COYOTE_TIME or max(0, char._coyote - dt)
@@ -1007,117 +1090,70 @@ function test_update(dt, char, map)
 
     if char == sonic_demoexe and isDemoWithPhysics then
         if grounded then
-            vx = approach(vx, 0, (GROUND_FRICTION))
+            vx = approach(vx, 0, GROUND_FRICTION)
         else
             vx = vx * AIR_DRAG
             vy = vy + (char.jumping and 1250 or 0) * dt
         end
     elseif char ~= sonic_demoexe then
-            if grounded and (lookUp or lookDown) then
-                local groundY = getGroundY(char, map, char.x, char.y)
-                if groundY then
-                    char.y, vy, vx = groundY, 0, 0
-                end
-                char.currentSprite = lookUp and (char.up or char.idle) or (char.down or char.idle)
-                char.angle, char.fakeAngle = 0, 0
-                char.velocity.x, char.velocity.y = vx, vy
-                return
-            elseif moveRight or moveLeft then
-                char.direction = moveRight and 1 or -1
-                local accel = char.acceleration
-                local maxS = char.maxSpeed
-                vx = clamp(vx + accel * inputDir * dt, -maxS, maxS)
-            else
-                if grounded then
-                    local slopeAngle = getGroundSlope(char, map, char.x, char.y)
-                    vx, vy = applySlopePhysics(char, vx, vy, slopeAngle, dt)
-                    if inputDir ~= 0 then
-                        vx = clamp(vx + GROUND_ACCEL * inputDir * dt, -TOP_SPEED, TOP_SPEED)
-                    else
-                        vx = approach(vx, 0, GROUND_FRICTION * dt)
-                    end
-                else
-                    if inputDir ~= 0 then
-                        vx = clamp(vx + AIR_ACCEL * inputDir * dt, -TOP_SPEED, TOP_SPEED)
-                    else
-                        vx = approach(vx, 0, AIR_DECEL * dt)
-                    end
-                end
-                if grounded then
-                    vx = vx * (1 - GROUND_FRICTION)
-                    if abs(vx) < 0.1 then
-                        vx = 0
-                    end
-                else
-                    vx = vx * AIR_DRAG
-                end
-                if abs(vx) == 0 and not char.jumping then
-                    char.angle, char.fakeAngle = 0, 0
-                end
-            end
-            local canPerformJump = char.canJump and (grounded or (char._coyote > 0))
-            if jump and canPerformJump and not char.jumping then
-                char.jumping = true
-                char.grounded = false
-                char._jumpBuf = 0
-                char.jumpHeldTime = 0
+        if grounded and (lookUp or lookDown) then
+            char.currentSprite = lookUp and (char.up or char.idle) or (char.down or char.idle)
+            char.angle, char.fakeAngle = 0, 0
+            char.velocity.x, char.velocity.y = 0, 0
+            return
+        elseif moveRight or moveLeft then
+            char.direction = moveRight and 1 or -1
+            local accel, maxS = char.acceleration, char.maxSpeed
+            vx = clamp(vx + accel * inputDir * dt, -maxS, maxS)
+        else
+            if grounded then
                 local slopeAngle = getGroundSlope(char, map, char.x, char.y)
-                vx = vx + JUMP_VELOCITY * sin(slopeAngle) * -1
-                vy = char.jumpHeight or -310
-                vy = JUMP_VELOCITY * cos(slopeAngle) -50
-                if sounds and sounds.jump_sound then sounds.jump_sound:play() end
-            end
-
-            if char.jumping then
-                if jump and char.jumpHeldTime < JUMP_HOLD_TIME then
-                    char.jumpHeldTime = char.jumpHeldTime + dt
-                    vy = vy + gravity * dt * -0.65
-                end
-            end
-
-            local absVx = abs(vx)
-            if not char.grounded then
-                if char.jumping then
-                    if char.jump then updateSprite(dt, char.jump, char) end
-                else
-                    if char.walk then
-                        updateSprite(dt * 0.75, char.walk, char)
-                    else
-                        char.currentSprite = char.jump or char.idle
-                    end
-                end
-            elseif not jump and char.jumping and vy < 0 then
-                if char.jump then updateSprite(dt, char.jump, char) end
-            elseif char.grounded and lookUp and vx == 0 then
-                char.currentSprite = char.up or char.idle
-            elseif char.grounded and lookDown and vx == 0 then
-                char.currentSprite = char.down or char.idle
-            elseif absVx >= (char.runThreshold or 175) then
-                if char.run then updateSprite(dt, char.run, char) end
-            elseif absVx > 0 then
-                local speedScale = (absVx / (char.maxSpeed or 200)) + 0.3
-                if char.walk then updateSprite(dt * speedScale, char.walk, char) end
+                vx, vy = applySlopePhysics(char, vx, vy, slopeAngle, dt)
+                vx = (inputDir ~= 0) and clamp(vx + GROUND_ACCEL * inputDir * dt, -TOP_SPEED, TOP_SPEED)or approach(vx, 0, GROUND_FRICTION * dt)
             else
-                if lookUp and vx == 0 then
-                    char.currentSprite = char.up or char.idle
-                elseif lookDown and vx == 0 then
-                    char.currentSprite = char.down or char.idle
-                else
-                    char.currentSprite = char.idle
-                end
+                vx = (inputDir ~= 0) and clamp(vx + AIR_ACCEL * inputDir * dt, -TOP_SPEED, TOP_SPEED) or approach(vx, 0, AIR_DECEL * dt)
             end
+            vx = vx * (grounded and (1 - GROUND_FRICTION) or AIR_DRAG)
+            if abs(vx) < 0.1 and not char.jumping then vx = 0; char.angle, char.fakeAngle = 0, 0 end
+        end
+        local canPerformJump = char.canJump and (grounded or (char._coyote > 0))
+        if char._jumpBuf > 0 and canPerformJump and not char.jumping then
+            char.jumping = true
+            char.grounded = false
+            char._jumpBuf = 0
+            char.jumpHeldTime = 0
+            local slopeAngle = getGroundSlope(char, map, char.x, char.y)
+            vx = vx + JUMP_VELOCITY * -math.sin(slopeAngle) * 0.25
+            vy = JUMP_VELOCITY * math.cos(slopeAngle)
+            if sounds and sounds.jump_sound then sounds.jump_sound:play() end
         end
 
-    if not char.grounded then
-        vy = vy + (char.jumping and 625 or 400) * dt
-        vx = vx * AIR_DRAG
+        if char.jumping and jump and char.jumpHeldTime < JUMP_HOLD_TIME then
+            char.jumpHeldTime = char.jumpHeldTime + dt
+            vy = vy - gravity * dt * 0.65
+        end
+        local absVx = abs(vx)
+        if not char.grounded then
+            if char.jumping then if char.jump then updateSprite(dt, char.jump, char) end
+            else if char.walk then updateSprite(dt * 0.75, char.walk, char)
+            else char.currentSprite = char.jump or char.idle end end
+        elseif lookUp and vx == 0 then
+            char.currentSprite = char.up or char.idle
+        elseif lookDown and vx == 0 then
+            char.currentSprite = char.down or char.idle
+        elseif absVx >= (char.runThreshold or 175) then
+            if char.run then updateSprite(dt, char.run, char) end
+        elseif absVx > 0 and char.walk then
+            updateSprite(dt * ((absVx / (char.maxSpeed or 200)) + 0.3), char.walk, char)
+        else
+            char.currentSprite = char.idle
+        end
     end
-
     local nextX, nextY = char.x + vx * dt, char.y + vy * dt
     if not checkCollision(char, map, nextX, char.y) then
         char.x = nextX
     else
-        local stepped
+        local stepped = false
         for step = 1, MAX_STEP_HEIGHT do
             if not checkCollision(char, map, nextX, char.y - step) then
                 char.x, char.y, stepped = nextX, char.y - step, true
@@ -1126,27 +1162,26 @@ function test_update(dt, char, map)
         end
         if not stepped then vx = 0 end
     end
-
     if not checkCollision(char, map, char.x, nextY) then
         char.y = nextY
         char.grounded = false
     else
         if vy > 0 then
-            char.grounded = true
-            char.jumping = false
-            vy = 0
+            char.grounded, char.jumping, vy = true, false, 0
             snapToGround(char, map, dt)
         elseif vy < 0 then
-            char.grounded = false
-            vy = 0
-            char.y = char.y + 1
+            char.grounded, vy, char.y = false, 0, char.y + 1
         end
     end
 
+    if grounded or abs(vx) > 0 then
+        local scrollFactor = bgScrollSpeed * clamp(abs(vx) / (char.maxSpeed or 200), 0.2, 1.0)
+        bgOffsetX = bgOffsetX - vx * dt * scrollFactor
+    end
     char.x = clamp(char.x, 15, mapWidth - 15)
     char.velocity.x, char.velocity.y = vx, vy
     if char ~= sonic_demoexe then
-        local fellOff = (char.y >= mapHeight + 40) or (char.y >= mapHeight - 5 and char.velocity.y == 0)
+        local fellOff = (char.y >= mapHeight + 40)
         updateGamestate(char, fellOff)
         updateCamera(dt, char, mapWidth, mapHeight)
     else
@@ -1154,12 +1189,42 @@ function test_update(dt, char, map)
     end
 end
 
+local colorCycleTimer = 0
+local colorCycleIndex = 1
+local colorCycleInterval = 0.25
+local colorPalettes = {
+    {
+        {0x24/255, 0x48/255, 0xD8/255},
+        {0x6C/255, 0x90/255, 0xFC/255},
+        {0xB4/255, 0xD8/255, 0xFC/255},
+        {0xD8/255, 0xFC/255, 0xFC/255},
+    },
+    {
+        {0x6C/255, 0x90/255, 0xFC/255},
+        {0xB4/255, 0xD8/255, 0xFC/255},
+        {0xD8/255, 0xFC/255, 0xFC/255},
+        {0x24/255, 0x48/255, 0xD8/255},
+    },
+    {
+        {0xB4/255, 0xD8/255, 0xFC/255},
+        {0xD8/255, 0xFC/255, 0xFC/255},
+        {0x24/255, 0x48/255, 0xD8/255},
+        {0x6C/255, 0x90/255, 0xFC/255},
+    },
+    {
+        {0xD8/255, 0xFC/255, 0xFC/255},
+        {0x24/255, 0x48/255, 0xD8/255},
+        {0x6C/255, 0x90/255, 0xFC/255},
+        {0xB4/255, 0xD8/255, 0xFC/255},
+    },
+}
+
 local hs_timer = 7
 local hs_totalTime = 0
 local tails_hiding = false
-local bushes_destroyed = false
-local hide_sound_played = false
-local bushes = {
+bushes_destroyed = false
+hide_sound_played = false
+bushes = {
     {x = 562, y = 665},
     {x = 1061, y = 740},
     {x = 2452, y = 690},
@@ -1186,7 +1251,7 @@ blackScreen = false
 blackTimer = 0
 
 local function keepDemoOnGround(demo, map)
-    if not map or not demo then return end
+    if not demo or not map or not map.height then return end
     local groundY = getGroundY(demo, map, demo.x, demo.y)
     if groundY then
         if demo.y > groundY then
@@ -1205,6 +1270,7 @@ local function keepDemoOnGround(demo, map)
 end
 
 local function handleBounce(knuck, demo, dt, map)
+    if not knuck or not demo or not map or not map.height then return end
     local overlapX = abs(knuck.x - demo.x) < (knuck.width + demo.width) / 2
     local overlapY = abs(knuck.y - demo.y) < (knuck.height + demo.height) / 2
 
@@ -1283,7 +1349,9 @@ local function handleBounce(knuck, demo, dt, map)
 end
 
 function knuck_up(dt)
-    updateSprite(dt * 0.5, s1.stage2, s1)
+    if stage1_vis then s1.currentSprite = s1.idle end
+    if not stage1_vis then updateSprite(dt * 0.5, s1.stage2, s1) end
+    if not stage2_vis then s1.currentSprite = s1.stage3 end
     if not demo_vis then
         local demo = sonic_demoexe
         demo.currentSprite = demo.crouch
@@ -1360,7 +1428,7 @@ function knuck_up(dt)
                 demo.jumping, demo.grounded = true, false
             end
         end
-        handleBounce(knuckles, demo, dt, "map2")
+        handleBounce(knuckles, demo, dt, map2)
         keepDemoOnGround(demo, map2)
 
         if demo.velocity.x < targetSpeed then
@@ -1522,9 +1590,10 @@ function hide_and_seek(dt)
     end
 end
 
-local animation_phase = "initial"
+local animation_phase = "wait"
 local frame_index = 1
 local repeat_count = 0
+local animation_timergugg = 0
 local animation_timer2 = 0
 local animation_timer3 = 0
 finished_transformation = false
@@ -1540,33 +1609,48 @@ local ANIM_SPEED = 0.25
 local animHandlers = {}
 
 function nextFrame(frames, idx)
+    if not frames or #frames == 0 then return 1 end
     return (idx % #frames) + 1
 end
 
-animHandlers.initial = function()
-    frame_index = frame_index + 1
-    if frame_index > #frames then
+animHandlers.wait = function(dt)
+    animation_timergugg = animation_timergugg + dt
+    if animation_timergugg >= 0.05 then
+        animation_phase = "initial"
         frame_index = 1
-        animation_phase = "repeatable"
+        --animation_timergugg = 0
     end
 end
 
-animHandlers.repeatable = function()
-    frame_index = nextFrame(repeatable_frames, frame_index)animation_phase = "repeatable"
+animHandlers.initial = function(dt)
+    frame_index = frame_index + 1
+    if frames and frame_index > #frames then
+        frame_index = 1
+        animation_phase = "repeatable"
+        repeat_count = 0
+    end
+end
+
+animHandlers.repeatable = function(dt)
+    frame_index = nextFrame(repeatable_frames, frame_index)
     repeat_count = repeat_count + 1
-    if repeat_count >= (12 * #repeatable_frames) then
+    if repeat_count >= (9 * #repeatable_frames) then
         repeat_count = 0
         animation_phase = "screen"
+        animation_timer3 = 0
     end
 end
 
 animHandlers.screen = function(dt)
     animation_timer3 = animation_timer3 + dt
     if animation_timer3 >= 0.1 then
+        animation_timer3 = 0
         animation_phase = "repeatable2"
+        repeat_count = 0
     end
 end
 
+idk_bg_cool = false
 animHandlers.repeatable2 = function(dt)
     animation_timer3 = animation_timer3 + dt
     if animation_timer3 >= 0.075 then
@@ -1575,21 +1659,27 @@ animHandlers.repeatable2 = function(dt)
         repeat_count = repeat_count + 1
 
         if repeat_count == 23 then
-            sounds.cr4sh_sound:setLooping(true)
-            sounds.cr4sh_sound:play()
+            if sounds.cr4sh_sound then
+                idk_bg_cool = true
+                sounds.cr4sh_sound:setLooping(true)
+                sounds.cr4sh_sound:play()
+            end
             bg_vis = false
-            menu = fast.getImage("images/background/menu3.png")
         end
 
         if repeat_count >= #repeatable2_frames then
             repeat_count = 0
             animation_phase = "black_screen"
+            animation_timer2 = 0
         end
     end
 end
 
 animHandlers.black_screen = function(dt)
-    sounds.cr4sh_sound:stop()
+    if sounds.cr4sh_sound then
+        idk_bg_cool = false
+        sounds.cr4sh_sound:stop()
+    end
     bg_vis = true
     animation_timer2 = animation_timer2 + dt
     if animation_timer2 >= 0.2 then
@@ -1597,7 +1687,7 @@ animHandlers.black_screen = function(dt)
         animation_phase = "done"
     end
 end
-local animTime = 0.876
+local animTime = 0.25
 local timer = 0
 local pressTextAnimTime = 2.2
 local pressTextTimer = 0
@@ -1614,16 +1704,35 @@ local flickerActive = false
 flickerRepeat = 0
 flickerMaxRepeats = 15
 link = "https://docs.google.com/document/d/1J0nOXnQMULgsqhbdnPfF3uHCHJ0wMvX1BC4TgXKVpX8"
+
+function updateColorCycle(dt)
+    colorCycleTimer = colorCycleTimer + dt
+    if colorCycleTimer >= colorCycleInterval then
+        colorCycleTimer = colorCycleTimer - colorCycleInterval
+        colorCycleIndex = colorCycleIndex + 1
+        if colorCycleIndex > #colorPalettes then
+            colorCycleIndex = 1
+        end
+    end
+end
+
+local splashFrameTime = 0.3
+local splashTimer = 0
+
 function menuscreen_update(dt)
     if gamestate ~= "menuscreen" then return end
     anim_timer = anim_timer + dt
-    if anim_timer >= ANIM_SPEED and animHandlers[animation_phase] then
-        anim_timer = 0
-        animHandlers[animation_phase](dt)
+    if anim_timer >= ANIM_SPEED then
+        anim_timer = anim_timer - ANIM_SPEED
+        local handler = animHandlers[animation_phase]
+        if handler then
+            handler(dt)
+        end
     end
     frameCounter = frameCounter + 1
-    if frameCounter >= frameDelay then
-        frameCounter = 0
+    splashTimer = splashTimer + dt
+    if splashTimer >= splashFrameTime then
+        splashTimer = splashTimer * splashFrameTime
         frames_idk_d = nextFrame(splash_frames.idle, frames_idk_d)
     end
     if finished_transformation then
@@ -1634,7 +1743,7 @@ function menuscreen_update(dt)
     end
     if finished_transformation and (love.keyboard.isDown("return") or jumpButton.active) then
         if sounds.laugh_sound and not flickerActive then
-            sounds.sound:play()
+            if sounds.sound then sounds.sound:play() end
             sounds.laugh_sound:play()
             flickerActive = true
             flickerRepeat, flickerTimer = 0, 0
@@ -1653,7 +1762,7 @@ function menuscreen_update(dt)
             end
         end
     end
-    if timer < animTime then
+    if timer < animTime and animation_phase ~= "wait" then
         timer = timer + dt
     end
 end
@@ -1777,15 +1886,37 @@ local joystickCooldown = 0
 local returnPressed = false
 errorSoundPlayed = false
 
+local scroll = {
+    [1] = 0,
+    [2] = 0,
+    [3] = 0,
+    [4] = 0
+}
+
+local scrollSpeeds = {
+    [1] = 110,
+    [2] = 60,
+    [3] = 40,
+    [4] = 100
+}
+
 scrollX = 0
 local function updateScrollingBG(dt)
-    if animation_phase == "initial" or not bg_vis then return end
+    if animation_phase == "wait" or not bg_vis then return end
     local width = menu:getWidth()
     scrollX = (scrollX + scroll_speed * dt) % width
+    for i = 1, #MenuImagesDamn do
+        local img = MenuImagesDamn[i]
+        if img then
+            local w = img:getWidth()
+            scroll[i] = (scroll[i] + scrollSpeeds[i] * dt) % w
+        end
+    end
 end
 
 local function eggmanCrashThing(dt)
     if not crashing then
+        sonic_demoexe.currentSprite = sonic_demoexe.fly
         love.window.setTitle("SONIC 2 3 1")
         test_update(dt, eggman, "map3")
         eggman_up(dt)
@@ -1938,6 +2069,10 @@ function love.update(dt)
         love.mouse.setRelativeMode(false)
     end
 
+    if love.timer.getTime() % 5 < dt then
+        print("Lua memory: " .. collectgarbage("count")/1024 .. " MB")
+    end
+
     if gamestate == "selection" then
         tails_caught = false
         tails_caught2 = false
@@ -1982,6 +2117,10 @@ function love.update(dt)
         returnPressed = false
     end
 
+    for _, s in ipairs(sounds) do
+        s:setVolume(0)
+    end
+    updateActiveCharacter()
     if gamestate == "credits" then
         if love.keyboard.isDown("down") or joystick.dy > 0.2 then
             scrollY = scrollY + scrollSpeed * dt
@@ -2042,7 +2181,6 @@ function love.update(dt)
         waiting = waiting + dt
         if waiting >= 3 then startTransition("credits") end
     end
-
     if transitioning then
         transitionAlpha = min(transitionAlpha + transitionSpeed * dt, 1)
         if transitionAlpha >= 1 then
@@ -2072,6 +2210,7 @@ function love.update(dt)
     menuscreen_update(dt)
     updateStageTitle(dt)
     updateScrollingBG(dt)
+    updateColorCycle(dt)
 end
 
 local function drawNumberString(x, y, str)
@@ -2086,6 +2225,12 @@ local function drawNumberString(x, y, str)
             love.graphics.draw(images.numbers, quads.numbers[10], x, y)
             x = x + 9
         end
+    end
+end
+
+function love.keypressed(key)
+    if key == "f3" then
+        showDebug = not showDebug
     end
 end
 
@@ -2143,7 +2288,7 @@ function selection()
 
     local function drawArrow(active, x, y, flipX)
         love.graphics.setColor(active and {0.5, 0.5, 0.5, selectionAlpha} or {1, 1, 1, selectionAlpha})
-        love.graphics.draw(warrowImage, x, y, 0, flipX, 1)
+        love.graphics.draw(uiAssets.warrow, x, y, 0, flipX, 1)
     end
 
     drawArrow(leftActive, 50, arrowY, 1)
@@ -2151,6 +2296,21 @@ function selection()
 
     love.graphics.setColor(1, 1, 1)
     love.graphics.pop()
+end
+
+local activeChar = nil
+function updateActiveCharacter()
+    if gamestate == "test" or gamestate == "hs" then
+        activeChar = tails
+    elseif gamestate == "knuck" then
+        activeChar = knuckles
+    elseif gamestate == "eggman" then
+        activeChar = eggman
+    elseif gamestate == "testmap" then
+        activeChar = test_character
+    else
+        activeChar = tails
+    end
 end
 
 local function char_draw(char, offsetX, offsetY)
@@ -2374,14 +2534,57 @@ function draw_menuscreen()
     sounds.sonic_theme:setLooping(true)
     local colorMod = (animation_phase == "repeatable2") and 0.5 or 1
     love.graphics.setColor(colorMod, colorMod, colorMod)
-    drawScrollingBG(menu, 0, 0)
-    love.graphics.setColor(1, 1, 1)
+    -- drawScrollingBG(menu, 0, 0)
+    if not idk_bg_cool then
+        for i = 1, #MenuImagesDamn do
+            local img = MenuImagesDamn[i]
+            if img then
+                local w = img:getWidth()
+                local y = 0
 
+                if i == 4 then
+                    local palette = colorPalettes[colorCycleIndex]
+                    local shader = love.graphics.newShader([[
+                        extern vec3 color1;
+                        extern vec3 color2;
+                        extern vec3 color3;
+                        extern vec3 color4;
+                        extern float colorMod;
+
+                        vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
+                            vec4 pixel = Texel(tex, texture_coords);
+                            vec3 c = pixel.rgb;
+                            if (c.r > 0.58 && c.g < 0.2 && c.b > 0.4) {c = color1;
+                            } else if (c.r >= 0.733 && c.g <= 0.2 && c.b >= 0.6) {c = color2;
+                            } else if (c.r > 0.8 && c.g < 0.4 && c.b > 0.7) {c = color3;
+                            } else if (c.r > 0.9 && c.g < 0.5 && c.b > 0.8) {c = color4;
+                            }
+                            c *= colorMod;
+                            return vec4(c, pixel.a);
+                        }
+                    ]])
+                    shader:send("color1", palette[1])
+                    shader:send("color2", palette[2])
+                    shader:send("color3", palette[3])
+                    shader:send("color4", palette[4])
+                    shader:send("colorMod", colorMod)
+                    love.graphics.setShader(shader)
+                    love.graphics.draw(img, -scroll[i], y)
+                    love.graphics.draw(img, -scroll[i] + w, y)
+                    love.graphics.setShader()
+                else
+                    love.graphics.draw(img, -scroll[i], y)
+                    love.graphics.draw(img, -scroll[i] + w, y)
+                end
+            end
+        end
+    end
+    love.graphics.setColor(1, 1, 1)
     local demoX = (base_width - DEMO_MenuScreen:getWidth()) / 2
     local demoY = (base_height - DEMO_MenuScreen:getHeight()) / 2
 
-    local t = min(timer / animTime, 6)
-    local currentY = linear(demoY + 40, demoY -10, t)
+    --i kinda forgot how to code
+    local currentY = demoY - 10
 
     local circleX = (base_width - circle:getWidth()) / 2
     local circleY = (base_height - circle:getHeight()) / 2
@@ -2390,14 +2593,21 @@ function draw_menuscreen()
         love.graphics.draw(circle, circleX, circleY + 30)
     end
 
+    love.graphics.setScissor(0, 0, base_width, 175)
     if animation_phase == "initial" then
+        local t = min(timer / animTime, 1)
+        local currentY = linear(demoY + 70, demoY - 10, t)
         love.graphics.draw(frames[frame_index], demoX, currentY)
     elseif animation_phase == "repeatable" then
         love.graphics.draw(repeatable_frames[frame_index], demoX, currentY)
     elseif animation_phase == "repeatable2" then
+        if idk_bg_cool then
+            drawScrollingBG(menu3, 0, 0)
+        end
         sounds.sonic_theme:stop()
         love.graphics.draw(repeatable2_frames[frame_index], demoX, currentY)
     end
+    love.graphics.setScissor()
 
     if animation_phase ~= "repeatable2" then
         love.graphics.draw(title, (base_width - title:getWidth()) / 2, demoY + 75)
@@ -2419,51 +2629,31 @@ function linearTime(t)
 end
 
 function tails_tail_thing()
-    local tailSprite = tail_tails.currentSprite
     local tailsSprite = tails.currentSprite
-
-    if not tailSprite then
-        print("idk")
-        return
-    end
 
     if tailsSprite == tails.idle or tailsSprite == tails.down or tailsSprite == tails.up then
         local flipX = (tails.direction == -1) and -1 or 1
         local offsetX = (flipX == 1) and -12 or 12
 
-        local halfW = tailSprite:getWidth() * 0.5
-        local halfH = tailSprite:getHeight() * 0.5
-
-        love.graphics.draw(
-            tailSprite,
-            tails.x + offsetX, tails.y + 5,
-            0,
-            flipX, 1,
-            halfW, halfH
-        )
+        local currentFrame = tail_tails.currentSprite
+        if type(currentFrame) == "userdata" then
+            local halfW = currentFrame:getWidth() * 0.5
+            local halfH = currentFrame:getHeight() * 0.5
+            love.graphics.draw(currentFrame, tails.x + offsetX, tails.y + 5, 0, flipX, 1, halfW, halfH)
+        end
+    else
+        print("idle")
     end
 end
 
 function mobile_stuff_draw()
     love.graphics.setColor(1, 1, 1)
 
-    love.graphics.draw(
-        joystickBaseImage,
-        joystick.x - joystickBaseImage:getWidth() / 2 * SCALE,
-        joystick.y - joystickBaseImage:getHeight() / 2 * SCALE,
-        0,
-        SCALE, SCALE
-    )
+    love.graphics.draw(uiAssets.joystickBase,joystick.x - uiAssets.joystickBase:getWidth() / 2 * SCALE,joystick.y - uiAssets.joystickBase:getHeight() / 2 * SCALE,0,SCALE, SCALE)
 
     local knobX = joystick.x + joystick.dx * joystick.radius
     local knobY = joystick.y + joystick.dy * joystick.radius
-    love.graphics.draw(
-        joystickKnobImage,
-        knobX - joystickKnobImage:getWidth() / 2 * SCALE,
-        knobY - joystickKnobImage:getHeight() / 2 * SCALE,
-        0,
-        SCALE, SCALE
-    )
+    love.graphics.draw(uiAssets.joystickKnob,knobX - uiAssets.joystickKnob:getWidth() / 2 * SCALE,knobY - uiAssets.joystickKnob:getHeight() / 2 * SCALE,0,SCALE, SCALE)
 
     if jumpButton.active then
         love.graphics.setColor(1, 1, 1, 0.75)
@@ -2471,29 +2661,27 @@ function mobile_stuff_draw()
         love.graphics.setColor(1, 1, 1, 1)
     end
 
-    love.graphics.draw(
-        jumpButtonImage,
-        jumpButton.x - jumpButtonImage:getWidth() / 2 * SCALE,
-        jumpButton.y - jumpButtonImage:getHeight() / 2 * SCALE,
-        0,
-        SCALE, SCALE
-    )
+    love.graphics.draw(uiAssets.jumpButton,jumpButton.x - uiAssets.jumpButton:getWidth() / 2 * SCALE,jumpButton.y - uiAssets.jumpButton:getHeight() / 2 * SCALE,0,SCALE, SCALE)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
-local transitionCanvas = love.graphics.newCanvas(base_width, base_height)
+function drawDebug(character)
+    if not showDebug then return end
+    love.graphics.setColor(0, 0, 0, 0.65)
+    love.graphics.rectangle("fill", 8, 8, 280, 155)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print("=== DEBUG SCREEN ===", 16, 12)
+    love.graphics.print(string.format("Pos: (%.1f, %.1f)", character.x, character.y), 16, 32)
+    love.graphics.print(string.format("Vel: (%.1f, %.1f)", character.velocity.x, character.velocity.y), 16, 48)
+    love.graphics.print(string.format("Speed: %.1f", math.sqrt(character.velocity.x^2 + character.velocity.y^2)), 16, 64)
+    love.graphics.print("Grounded: " .. tostring(character.grounded), 16, 80)
+    love.graphics.print("Jumping: " .. tostring(character.jumping), 16, 96)
+    love.graphics.print("Direction: " .. character.direction, 16, 112)
+    love.graphics.print(string.format("Sprite Index: %.1f", character.spriteIndex), 16, 128)
+    love.graphics.print(string.format("FPS: %d", love.timer.getFPS()), 16, 144)
+end
 
-function love.draw()
-    love.graphics.setFont(Font)
-    love.graphics.setCanvas(canvas)
-    love.graphics.clear(0,0,0,1)
-    love.graphics.setColor(0, 0, 0)
-    love.graphics.rectangle("fill", 0, 0, base_width, base_height)
-    love.graphics.setColor(1, 1, 1)
-
-    local camX, camY = floor(camera.x + 0.5), floor(camera.y + 0.5)
-
-    local function drawStageTitle(titleImg, circlesImg, actImg)
+function drawStageTitle(titleImg, circlesImg, actImg)
         if not showStageTitle then return end
 
         local remaining = stageTitleDuration - stageTitleTimer
@@ -2521,7 +2709,197 @@ function love.draw()
 
         local y = base_height / 2 - 40
         drawTitleCard(titleImg, circlesImg, actImg, slideX, y)
+end
+
+function drawShadowedText(text, x, y)
+    love.graphics.setColor(0, 0, 0)
+    love.graphics.print(text, x + 1, y + 1)
+    love.graphics.setColor(1, 1, 0)
+    love.graphics.print(text, x, y)
+    love.graphics.setColor(1, 1, 1)
+end
+
+function drawLayer(img, speed)
+    local iw = img:getWidth()
+    bgOffsetX = bgOffsetX % iw
+    local offset = bgOffsetX * speed
+    love.graphics.draw(img, -offset, 0)
+    love.graphics.draw(img, -offset + iw, 0)
+end
+
+function test_draw(camX, camY)
+        sounds.buildUPSound:stop()
+        sounds.green_hill:play()
+        love.graphics.setColor(currentColor)
+        --drawScrollingBG(emhi_bg, 0,0)
+        drawLayer(emhi_bg, 1)
+        love.graphics.setColor(1,1,1)
+
+        love.graphics.push()
+        love.graphics.translate(-camX, -camY)
+        love.graphics.draw(loadMapImage("test2"), 0,0)
+        if sonic_demoexe.currentSprite then love.graphics.draw(sonic_demoexe.currentSprite,10948,730) end
+        tails_tail_thing()
+        char_draw(tails,0,2)
+        love.graphics.pop()
+
+        drawStats()
+        drawStageTitle(greenHillZoneTitle, greenHillZoneCircles, stageActImg1)
+end
+
+function hs_draw(camX, camY)
+        love.graphics.push()
+        if bushes_destroyed then love.graphics.draw(fire_bg.currentSprite,0,0) end
+        love.graphics.translate(-camX, -camY)
+        love.graphics.draw(loadMapImage("test3"),0,0)
+        if not tails_caught2 and tails.currentSprite then
+            tails_tail_thing()
+            char_draw(tails,0,2)
+        end
+        for _,b in ipairs(bushes) do love.graphics.draw(bush_img,b.x,b.y) end
+        char_draw(sonic_demoexe,0,2)
+        love.graphics.pop()
+
+        drawStats()
+        if not bushes_destroyed then
+            local text = string.format("HIDING TIME LEFT: %.1f", hs_timer)
+            local w = Font:getWidth(text)
+            drawShadowedText(text, base_width - w - 20, 30)
+        end
+        drawStageTitle(hideAndSeekZoneTitle, hideAndSeekZoneCircles, stageActImg2)
+
+        if show_black_screen then
+            love.graphics.setColor(0,0,0,1)
+            love.graphics.rectangle("fill",0,0, base_width, base_height)
+            love.graphics.setColor(1,1,1)
+        end
+end
+
+function knuck_draw(camX, camY)
+        love.graphics.push()
+        drawScrollingBG(knuck_bg,0,0)
+        love.graphics.translate(-camX,-camY)
+        love.graphics.draw(loadMapImage("knuck1"))
+        char_draw(knuckles,0,-2)
+        if demo_vis then char_draw(sonic_demoexe,0,-2) end
+        if stage1_vis then love.graphics.draw(s1.currentSprite, 2544, 518) end
+        if stage2_vis and s1.currentSprite then love.graphics.draw(s1.currentSprite, 4387, 864) end
+        if stage3_vis then love.graphics.draw(s1.currentSprite, 5481, 867) end
+
+        local function checkStage(stageVis, soundFlag)
+            if not stageVis and not _G[soundFlag] then
+                sounds.sound_fix:play()
+                flashScreen(0.45)
+                _G[soundFlag] = true
+            end
+        end
+
+        checkStage(stage1_vis, "soundPlayed10")
+        checkStage(stage2_vis, "soundPlayed9")
+        checkStage(stage3_vis, "soundPlayed8")
+
+        if idk_fix and knuckles.x < 5991 then
+            knuckles.x = 5991
+            knuckles.velocity.x = math.max(0, knuckles.velocity.x)
+        end
+        love.graphics.pop()
+        if bossfightActive then
+            local text = string.format("TIME LEFT: %.1f", bossfightTimer)
+            local w = Font:getWidth(text)
+            drawShadowedText(text, base_width - w - 20, 30)
+        end
+        drawStats()
+        drawStageTitle(greenHillZoneTitle, hideAndSeekZoneCircles, stageActImg1)
+
+        if blackScreen then
+            love.graphics.setColor(0,0,0,1)
+            love.graphics.rectangle("fill",0,0, base_width, base_height)
+        end
+        love.graphics.setColor(1, 1, 1)
+end
+
+MenuImagesDamn2 = {}
+MenuImagesDamn2[1] = love.graphics.newImage("images/background/gh/1.png")
+MenuImagesDamn2[2] = love.graphics.newImage("images/background/gh/2.png")
+MenuImagesDamn2[3] = love.graphics.newImage("images/background/gh/3.png")
+MenuImagesDamn2[4] = love.graphics.newImage("images/background/gh/4.png")
+MenuImagesDamn2[5] = love.graphics.newImage("images/background/gh/5.png")
+MenuImagesDamn2[6] = love.graphics.newImage("images/background/gh/6.png")
+
+function eggman_draw(camX, camY)
+    if not crashing2 then 
+        drawScrollingBG(MenuImagesDamn2[1], 0, 0)
+        drawScrollingBG(MenuImagesDamn2[2], 5, 0)
+        drawScrollingBG(MenuImagesDamn2[3], 0, 0)
+        drawLayer(MenuImagesDamn2[4], 0.4)
+        local palette = colorPalettes[colorCycleIndex]
+        local colorMod = 1.0
+
+        if palette then
+                    local shader = love.graphics.newShader([[
+                        extern vec3 color1;
+                        extern vec3 color2;
+                        extern vec3 color3;
+                        extern vec3 color4;
+                        extern float colorMod;
+
+                        vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
+                            vec4 pixel = Texel(tex, texture_coords);
+                            vec3 c = pixel.rgb;
+                            if (c.r > 0.58 && c.g < 0.2 && c.b > 0.4) {c = color1;
+                            } else if (c.r >= 0.733 && c.g <= 0.2 && c.b >= 0.6) {c = color2;
+                            } else if (c.r > 0.8 && c.g < 0.4 && c.b > 0.7) {c = color3;
+                            } else if (c.r > 0.9 && c.g < 0.5 && c.b > 0.8) {c = color4;
+                            }
+                            c *= colorMod;
+                            return vec4(c, pixel.a);
+                        }
+                    ]])
+
+            shader:send("color1", palette[1])
+            shader:send("color2", palette[2])
+            shader:send("color3", palette[3])
+            shader:send("color4", palette[4])
+            shader:send("colorMod", colorMod)
+
+            love.graphics.setShader(shader)
+            drawLayer(MenuImagesDamn2[5], 0.25)
+            drawLayer(MenuImagesDamn2[6], 0.75)
+            love.graphics.setShader()
+        else
+            drawLayer(MenuImagesDamn2[5], 0.25)
+            drawLayer(MenuImagesDamn2[6], 0.75)
+        end
     end
+        love.graphics.push()
+        love.graphics.translate(-camX,-camY)
+        love.graphics.draw(egg_mob,3200,903)
+        love.graphics.draw(loadMapImage("gh1"),0,0)
+        char_draw(sonic_demoexe,0,-2)
+        char_draw(eggman,0,-8)
+        love.graphics.pop()
+        if not crashing2 then
+            drawStats()
+            drawStageTitle(greenHillZoneTitle, labCircles, stageActImg1)
+        end
+        if crashing and not crashing2 then
+            love.graphics.setColor(1,1,1,crashAlpha)
+            love.graphics.rectangle("fill",0,0,base_width,base_height)
+        end
+end
+
+local transitionCanvas
+if transitionCanvas then transitionCanvas:release() end
+transitionCanvas = love.graphics.newCanvas(base_width, base_height)
+
+function love.draw()
+    love.graphics.setFont(Font)
+    love.graphics.setCanvas(canvas)
+    love.graphics.clear(0,0,0,1)
+    love.graphics.setColor(0, 0, 0)
+    love.graphics.rectangle("fill", 0, 0, base_width, base_height)
+    love.graphics.setColor(1, 1, 1)
+    local camX, camY = floor(camera.x + 0.5), floor(camera.y + 0.5)
 
     if gamestate == "menuscreen" or gamestate == "selection" then
         local mx, my = love.mouse.getPosition()
@@ -2535,128 +2913,13 @@ function love.draw()
     elseif gamestate == "selection" then
         selection()
     elseif gamestate == "test" then
-        sounds.buildUPSound:stop()
-        sounds.green_hill:play()
-        love.graphics.setColor(currentColor)
-        drawScrollingBG(emhi_bg, 0,0)
-        love.graphics.setColor(1,1,1)
-
-        love.graphics.push()
-        love.graphics.translate(-camX, -camY)
-        love.graphics.draw(mapImages.test2, 0,0)
-        if sonic_demoexe.currentSprite then love.graphics.draw(sonic_demoexe.currentSprite,10948,730) end
-        tails_tail_thing()
-        char_draw(tails,0,2)
-        love.graphics.pop()
-
-        drawStats()
-        drawStageTitle(greenHillZoneTitle, greenHillZoneCircles, stageActImg1)
+        test_draw(camX, camY)
     elseif gamestate == "hs" then
-        love.graphics.push()
-        if bushes_destroyed then love.graphics.draw(fire_bg.currentSprite,0,0) end
-        love.graphics.translate(-camX, -camY)
-        love.graphics.draw(mapImages.test3,0,0)
-        if not tails_caught2 and tails.currentSprite then
-            tails_tail_thing()
-            char_draw(tails,0,2)
-        end
-        for _,b in ipairs(bushes) do love.graphics.draw(bush_img,b.x,b.y) end
-        char_draw(sonic_demoexe,0,2)
-        love.graphics.pop()
-
-        drawStats()
-        if not bushes_destroyed then
-            local text = string.format("HIDING TIME LEFT: %.1f", hs_timer)
-            local w = Font:getWidth(text)
-            love.graphics.setColor(0,0,0)
-            love.graphics.print(text, base_width-w-17,33)
-            love.graphics.setColor(1,1,0)
-            love.graphics.print(text, base_width-w-20,30)
-        end
-        drawStageTitle(hideAndSeekZoneTitle, hideAndSeekZoneCircles, stageActImg2)
-
-        if show_black_screen then
-            love.graphics.setColor(0,0,0,1)
-            love.graphics.rectangle("fill",0,0, base_width, base_height)
-            love.graphics.setColor(1,1,1)
-        end
-
+        hs_draw(camX, camY)
     elseif gamestate == "knuck" then
-        love.graphics.push()
-        drawScrollingBG(knuck_bg,0,0)
-        love.graphics.translate(-camX,-camY)
-        love.graphics.draw(mapImages.knuck1)
-        char_draw(knuckles,0,-2)
-        if demo_vis then char_draw(sonic_demoexe,0,-2) end
-        if stage1_vis then love.graphics.draw(stage1, 2544, 518) end
-        if stage2_vis and s1.currentSprite then love.graphics.draw(s1.currentSprite, 4387, 864) end
-        if stage3_vis then love.graphics.draw(stage3, 5481, 867) end
-
-        if stage1_vis == false then
-            if not soundPlayed10 then
-            sounds.sound_fix:play()
-            flashScreen(0.45)
-            soundPlayed10 = true
-            end
-        end
-
-        if stage3_vis == false then
-            if not soundPlayed8 then
-            sounds.sound_fix:play()
-            flashScreen(0.45)
-            soundPlayed8 = true
-            end
-        end
-        
-        if stage2_vis == false then
-            if not soundPlayed9 then
-            sounds.sound_fix:play()
-            flashScreen(0.45)
-            soundPlayed9 = true
-            end
-        end
-
-        if idk_fix then
-            if knuckles.x < 5991 then
-                knuckles.x = 5991
-                knuckles.velocity.x = math.max(0, knuckles.velocity.x)
-            end
-        end
-        love.graphics.pop()
-        if bossfightActive then
-            local text = string.format("TIME LEFT: %.1f", bossfightTimer)
-            local w = Font:getWidth(text)
-            love.graphics.setColor(0,0,0)
-            love.graphics.print(text, base_width-w-17,33)
-            love.graphics.setColor(1,1,0)
-            love.graphics.print(text, base_width-w-20,30)
-            love.graphics.setColor(1, 1, 1)
-        end
-        drawStats()
-        drawStageTitle(greenHillZoneTitle, hideAndSeekZoneCircles, stageActImg1)
-
-        if blackScreen then
-            love.graphics.setColor(0,0,0,1)
-            love.graphics.rectangle("fill",0,0, base_width, base_height)
-        end
-        love.graphics.setColor(1, 1, 1)
+        knuck_draw(camX, camY)
     elseif gamestate == "eggman" then
-        if not crashing2 then drawScrollingBG(menu,0,0) end
-        love.graphics.push()
-        love.graphics.translate(-camX,-camY)
-        love.graphics.draw(egg_mob,3200,903)
-        love.graphics.draw(mapImages.gh1,0,0)
-        char_draw(sonic_demoexe,0,-2)
-        char_draw(eggman,0,-8)
-        love.graphics.pop()
-        if not crashing2 then
-            drawStats()
-            drawStageTitle(greenHillZoneTitle, labCircles, stageActImg1)
-        end
-        if crashing and not crashing2 then
-            love.graphics.setColor(1,1,1,crashAlpha)
-            love.graphics.rectangle("fill",0,0,base_width,base_height)
-        end
+        eggman_draw(camX, camY)
     elseif gamestate == "torture" and tort_visible then
         love.graphics.setColor(1,1,1,0.355)
         if sonic_demoexe_screen.currentSprite then
@@ -2721,7 +2984,7 @@ function love.draw()
     elseif gamestate == "testmap" then
         love.graphics.push()
         love.graphics.translate(-camX,-camY)
-        love.graphics.draw(mapImages.testmap,0,0)
+        love.graphics.draw(loadMapImage("testmap"),0,0)
         char_draw(test_character,0,-2)
         love.graphics.pop()
         drawStats()
@@ -2735,9 +2998,9 @@ function love.draw()
 
     love.graphics.setColor(1, 1, 1, 1)
     if isMobile then mobile_stuff_draw() end
+    drawDebug(activeChar)
     love.graphics.setCanvas()
     love.graphics.draw(canvas, offset_x, offset_y, 0, scale_factor, scale_factor)
-    --fast.drawFPS(10, 10)
 end
 
 function quantizeColor(r, g, b, levels)
@@ -2748,7 +3011,7 @@ function quantizeColor(r, g, b, levels)
     local qb = floor(b / step + 0.5) * step
     return qr, qg, qb
 end
-
+local lastColorLerp
 function drawTransition(alpha)
     local levels = 4
     if transitioning or colorLerp ~= lastColorLerp then
@@ -2759,19 +3022,11 @@ function drawTransition(alpha)
         end)
         lastColorLerp = colorLerp
     end
-    local r1, g1, b1, r2, g2, b2
-    if transitioning then
-        r1, g1, b1 = 1, 1, 1
-        r2, g2, b2 = 0, 0, 1
-    else
-        r1, g1, b1 = 0, 0, 1
-        r2, g2, b2 = 1, 1, 1
-    end
-
-    local r = r1 + (r2 - r1) * colorLerp
-    local g = g1 + (g2 - g1) * colorLerp
-    local b = b1 + (b2 - b1) * colorLerp
-
+    local fromColor = transitioning and {1, 1, 1} or {0, 0, 1}
+    local toColor   = transitioning and {0, 0, 1} or {1, 1, 1}
+    local r = fromColor[1] + (toColor[1] - fromColor[1]) * colorLerp
+    local g = fromColor[2] + (toColor[2] - fromColor[2]) * colorLerp
+    local b = fromColor[3] + (toColor[3] - fromColor[3]) * colorLerp
     local qr, qg, qb = quantizeColor(r, g, b, levels)
     love.graphics.setBlendMode("multiply", "premultiplied")
     love.graphics.setColor(qr, qg, qb)
@@ -2781,7 +3036,8 @@ function drawTransition(alpha)
         love.graphics.setColor(0, 0, 0, alpha)
         love.graphics.rectangle("fill", 0, 0, base_width, base_height)
     end
-    love.graphics.setColor(1, 1, 1, 1)
+
+    love.graphics.setColor(1, 1, 1)
 end
 
 function drawStats()
@@ -2934,16 +3190,6 @@ function love.touchreleased(id, x, y)
         end
     end
     jumpButton.active = rightSideTouch
-end
-
-function sign(x)
-    if x > 0 then
-        return 1
-    elseif x < 0 then
-        return -1
-    else
-        return 0
-    end
 end
 
 function quantize(v)

@@ -173,19 +173,4 @@ function fast.clearAll()
     fast._soundPool = {}
     collectgarbage("collect")
 end
-
-function fast.drawFPS(x, y)
-    x, y = x or 10, y or 10
-    local fps = lt.getFPS()
-    local color
-    if fps >= 55 then
-        color = {0, 1, 0, 1}
-    elseif fps >= 30 then
-        color = {1, 1, 0, 1}
-    else
-        color = {1, 0, 0, 1}
-    end
-    fast.drawTextOutline("FPS: " .. fps, x, y, color, {0, 0, 0, 1}, 1)
-end
-
 return fast
