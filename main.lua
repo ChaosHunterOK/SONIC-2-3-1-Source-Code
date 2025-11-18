@@ -70,7 +70,7 @@ local startTime = os.time()
 local spritesFolder = "images/sprites/"
 local stats = {score = 0, rings = 0}
 local gameTime = 0
-local gamestate = "warning"
+local gamestate = "testmap"
 
 local isMobile = false
 local os_device = love.system.getOS()
@@ -950,10 +950,15 @@ function checkCollision(char, map, x, y)
     local w, h = map.width, map.height
     local coll = map.collision
 
-    local halfW, halfH = char.width * 0.5, char.height * 0.5
-    local left, right = floor(x - halfW), floor(x + halfW - 1)
-    local top, bottom = floor(y - halfH), floor(y + halfH - 1)
-    if left < 0 or top < 0 or right >= w then
+    local halfW  = char.width * 0.5
+    local halfH  = char.height * 0.5
+
+    local left = floor(x - halfW)
+    local right = floor(x + halfW - 1)
+    local top = floor(y - halfH)
+    local bottom = floor(y + halfH - 1)
+
+    if left < 0 or right >= w or top < 0 then
         return true
     end
     if bottom >= h then
@@ -961,9 +966,9 @@ function checkCollision(char, map, x, y)
     end
 
     for ty = top, bottom do
-        local tyIdx = ty * w
+        local row = ty * w
         for tx = left, right do
-            if coll[tyIdx + tx + 1] then
+            if coll[row + tx + 1] then
                 return true
             end
         end
@@ -988,16 +993,27 @@ end
 
 SNAP_SPEED = 300
 function snapToGround(char, map, dt)
-    if char.jumping then char.grounded = false return false end
+    if char.jumping then
+        char.grounded = false
+        return false
+    end
+
     local groundY = getGroundY(char, map, char.x, char.y)
-    if not groundY then char.grounded = false return false end
+    if not groundY then
+        char.grounded = false
+        return false
+    end
 
     local newY = approach(char.y, groundY, SNAP_SPEED * dt)
-    local dist = math.abs(newY - groundY)
     char.y = newY
-    local grounded = dist < 1
+
+    local grounded = abs(newY - groundY) < 1
     char.grounded = grounded
-    if grounded and char.velocity.y > 0 then char.velocity.y = 0 end
+
+    if grounded and char.velocity.y > 0 then
+        char.velocity.y = 0
+    end
+
     return grounded
 end
 
@@ -1104,7 +1120,7 @@ function test_update(dt, char, map)
         elseif moveRight or moveLeft then
             char.direction = moveRight and 1 or -1
             local accel, maxS = char.acceleration, char.maxSpeed
-            vx = clamp(vx + accel * inputDir * dt, -maxS, maxS)
+            vx = vx + accel * inputDir * dt
         else
             if grounded then
                 local slopeAngle = getGroundSlope(char, map, char.x, char.y)
@@ -1114,7 +1130,10 @@ function test_update(dt, char, map)
                 vx = (inputDir ~= 0) and clamp(vx + AIR_ACCEL * inputDir * dt, -TOP_SPEED, TOP_SPEED) or approach(vx, 0, AIR_DECEL * dt)
             end
             vx = vx * (grounded and (1 - GROUND_FRICTION) or AIR_DRAG)
-            if abs(vx) < 0.1 and not char.jumping then vx = 0; char.angle, char.fakeAngle = 0, 0 end
+        end
+        vx = clamp(vx, - (char.maxSpeed or 200), (char.maxSpeed or 200))
+        if abs(vx) < 0.05 and not moveRight and not moveLeft then
+            vx = 0
         end
         local canPerformJump = char.canJump and (grounded or (char._coyote > 0))
         if char._jumpBuf > 0 and canPerformJump and not char.jumping then
